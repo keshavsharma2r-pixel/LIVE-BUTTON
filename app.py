@@ -3,14 +3,16 @@ import feedparser
 import requests
 import time
 from datetime import datetime, timezone, timedelta
-import urllib.parse
+import socket
+
+socket.setdefaulttimeout(10)
 
 # -------------------------------------------------
 # PAGE CONFIG
 # -------------------------------------------------
 st.set_page_config(layout="wide", page_title="GLOBAL NEWS INTELLIGENCE")
 
-st.title("🌍 GLOBAL NEWS INTELLIGENCE ENGINE")
+st.title("🌍 GLOBAL NEWS INTELLIGENCE ENGINE (STABLE)")
 
 # -------------------------------------------------
 # SESSION STATE
@@ -32,11 +34,11 @@ if col1.button("🚀 Start Live"):
 if col2.button("🛑 Stop"):
     st.session_state.live = False
 
-refresh_interval = st.slider("Refresh interval (seconds)", 10, 60, 20)
-time_window = st.slider("Show news from last (minutes)", 30, 240, 120)
+refresh_interval = st.slider("Refresh interval (seconds)", 15, 120, 30)
+time_window = st.slider("Show news from last (minutes)", 60, 360, 180)
 
 # -------------------------------------------------
-# FLASHING LIVE BADGE
+# LIVE BADGE
 # -------------------------------------------------
 if st.session_state.live:
     st.markdown(
@@ -56,9 +58,9 @@ else:
 placeholder = st.empty()
 
 # -------------------------------------------------
-# SOURCE 1: GOOGLE NEWS SEARCH (MAX COVERAGE)
+# FEEDS (MAX COVERAGE)
 # -------------------------------------------------
-GOOGLE_SEARCH_FEEDS = [
+GOOGLE_FEEDS = [
     "https://news.google.com/rss/search?q=breaking+news",
     "https://news.google.com/rss/search?q=world+news",
     "https://news.google.com/rss/search?q=India",
@@ -67,32 +69,38 @@ GOOGLE_SEARCH_FEEDS = [
     "https://news.google.com/rss/search?q=technology",
 ]
 
-# -------------------------------------------------
-# SOURCE 2: GDELT (GLOBAL EVENTS DATA)
-# -------------------------------------------------
-def fetch_gdelt():
-    url = "https://api.gdeltproject.org/api/v2/doc/doc?query=global&mode=artlist&maxrecords=50&format=json"
-    try:
-        r = requests.get(url, timeout=10)
-        data = r.json()
-        return data.get("articles", [])
-    except:
-        return []
-
-# -------------------------------------------------
-# SOURCE 3: TWITTER SIGNALS (NITTER RSS)
-# -------------------------------------------------
 TWITTER_RSS = [
     "https://nitter.net/search/rss?f=tweets&q=breaking+news",
     "https://nitter.net/search/rss?f=tweets&q=stock+market",
-    "https://nitter.net/search/rss?f=tweets&q=India+news",
 ]
 
 # -------------------------------------------------
-# HELPER
+# SAFE HELPERS
 # -------------------------------------------------
-def is_recent(published):
-    return published >= datetime.now(timezone.utc) - timedelta(minutes=time_window)
+def safe_feed(url):
+    try:
+        return feedparser.parse(url)
+    except Exception:
+        return None
+
+def fetch_gdelt():
+    try:
+        r = requests.get(
+            "https://api.gdeltproject.org/api/v2/doc/doc",
+            params={
+                "query": "global",
+                "mode": "artlist",
+                "maxrecords": 50,
+                "format": "json"
+            },
+            timeout=10
+        )
+        return r.json().get("articles", [])
+    except Exception:
+        return []
+
+def is_recent(dt):
+    return dt >= datetime.now(timezone.utc) - timedelta(minutes=time_window)
 
 # -------------------------------------------------
 # LIVE MODE
@@ -100,54 +108,64 @@ def is_recent(published):
 if st.session_state.live:
 
     start = time.time()
+    items = []
 
     with placeholder.container():
 
         st.subheader(f"Updated @ {datetime.utcnow().strftime('%H:%M:%S')} UTC")
 
-        news_items = []
+        # ---------- GOOGLE NEWS ----------
+        for url in GOOGLE_FEEDS:
+            feed = safe_feed(url)
+            if not feed:
+                continue
 
-        # -------- GOOGLE NEWS --------
-        for url in GOOGLE_SEARCH_FEEDS:
-            feed = feedparser.parse(url)
-            for item in feed.entries:
+            for e in feed.entries:
                 try:
-                    pub = datetime(*item.published_parsed[:6], tzinfo=timezone.utc)
+                    pub = datetime(*e.published_parsed[:6], tzinfo=timezone.utc)
                 except:
                     continue
+
                 if not is_recent(pub):
                     continue
-                if item.link in st.session_state.seen:
+                if e.link in st.session_state.seen:
                     continue
-                news_items.append(("Google", pub, item.title, item.link))
 
-        # -------- GDELT --------
+                items.append(("Google", pub, e.title, e.link))
+
+        # ---------- GDELT ----------
         for art in fetch_gdelt():
             link = art.get("url")
             title = art.get("title", "GDELT Event")
-            if link and link not in st.session_state.seen:
-                news_items.append(("GDELT", datetime.now(timezone.utc), title, link))
 
-        # -------- TWITTER SIGNALS --------
+            if not link or link in st.session_state.seen:
+                continue
+
+            items.append(("GDELT", datetime.now(timezone.utc), title, link))
+
+        # ---------- TWITTER SIGNALS ----------
         for url in TWITTER_RSS:
-            feed = feedparser.parse(url)
-            for item in feed.entries:
-                if item.link in st.session_state.seen:
+            feed = safe_feed(url)
+            if not feed:
+                continue
+
+            for e in feed.entries:
+                if e.link in st.session_state.seen:
                     continue
-                news_items.append(("X/Twitter", datetime.now(timezone.utc), item.title, item.link))
+                items.append(("X/Twitter", datetime.now(timezone.utc), e.title, e.link))
 
-        # -------- SORT & DISPLAY --------
-        news_items.sort(key=lambda x: x[1], reverse=True)
+        # ---------- DISPLAY ----------
+        items.sort(key=lambda x: x[1], reverse=True)
 
-        if not news_items:
-            st.warning("No new data in this cycle — feeds are quiet.")
+        if not items:
+            st.warning("Feeds are temporarily quiet or blocked.")
         else:
-            st.success(f"Showing {len(news_items)} live items")
+            st.success(f"Showing {len(items)} live items")
 
-        for source, pub, title, link in news_items[:100]:
+        for src, pub, title, link in items[:100]:
             st.session_state.seen.add(link)
             st.markdown(f"### {title}")
-            st.write(f"🕒 {pub.strftime('%Y-%m-%d %H:%M:%S')} | 📡 {source}")
+            st.write(f"🕒 {pub.strftime('%Y-%m-%d %H:%M:%S')} | 📡 {src}")
             st.markdown(f"[Open]({link})")
             st.divider()
 
