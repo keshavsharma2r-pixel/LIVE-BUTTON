@@ -1,15 +1,16 @@
 import streamlit as st
-import time
 import feedparser
+import requests
+import time
 from datetime import datetime, timezone, timedelta
 import urllib.parse
 
 # -------------------------------------------------
 # PAGE CONFIG
 # -------------------------------------------------
-st.set_page_config(layout="wide", page_title="🇮🇳 LIVE INDIA NEWS TERMINAL")
+st.set_page_config(layout="wide", page_title="GLOBAL NEWS INTELLIGENCE")
 
-st.title("🇮🇳 LIVE INDIA NEWS (GENERAL • MARKET • NSE • BSE)")
+st.title("🌍 GLOBAL NEWS INTELLIGENCE ENGINE")
 
 # -------------------------------------------------
 # SESSION STATE
@@ -17,56 +18,35 @@ st.title("🇮🇳 LIVE INDIA NEWS (GENERAL • MARKET • NSE • BSE)")
 if "live" not in st.session_state:
     st.session_state.live = False
 
-if "seen_links" not in st.session_state:
-    st.session_state.seen_links = set()
-
-if "last_check" not in st.session_state:
-    st.session_state.last_check = datetime.now(timezone.utc) - timedelta(minutes=30)
+if "seen" not in st.session_state:
+    st.session_state.seen = set()
 
 # -------------------------------------------------
-# TOP CONTROLS
+# CONTROLS
 # -------------------------------------------------
-news_type = st.radio(
-    "Select News Category",
-    ["🇮🇳 India – General", "📈 India – Market"],
-    horizontal=True
-)
-
 col1, col2 = st.columns(2)
 
-if col1.button("🚀 Start Live Updates"):
+if col1.button("🚀 Start Live"):
     st.session_state.live = True
 
-if col2.button("🛑 Stop Live"):
+if col2.button("🛑 Stop"):
     st.session_state.live = False
 
-refresh_interval = st.slider("Refresh Interval (seconds)", 5, 30, 10)
-latest_minutes = st.slider("Consider news from last (minutes)", 5, 60, 20)
+refresh_interval = st.slider("Refresh interval (seconds)", 10, 60, 20)
+time_window = st.slider("Show news from last (minutes)", 30, 240, 120)
 
 # -------------------------------------------------
 # FLASHING LIVE BADGE
 # -------------------------------------------------
 if st.session_state.live:
-    badge_text = "🔴 LIVE INDIA" if "General" in news_type else "🔴 LIVE MARKET"
     st.markdown(
-        f"""
+        """
         <style>
-        @keyframes pulse {{
-            0% {{ opacity: 1; }}
-            50% {{ opacity: 0.3; }}
-            100% {{ opacity: 1; }}
-        }}
-        .live-badge {{
-            color: white;
-            background: red;
-            padding: 6px 12px;
-            border-radius: 6px;
-            font-weight: bold;
-            display: inline-block;
-            animation: pulse 1s infinite;
-        }}
+        @keyframes pulse { 0%{opacity:1;} 50%{opacity:.3;} 100%{opacity:1;} }
+        .live { background:red;color:white;padding:6px 12px;
+                border-radius:6px;font-weight:bold;animation:pulse 1s infinite; }
         </style>
-        <div class="live-badge">{badge_text}</div>
+        <div class="live">🔴 LIVE</div>
         """,
         unsafe_allow_html=True
     )
@@ -76,183 +56,105 @@ else:
 placeholder = st.empty()
 
 # -------------------------------------------------
-# SOURCES
+# SOURCE 1: GOOGLE NEWS SEARCH (MAX COVERAGE)
 # -------------------------------------------------
-INDIA_GENERAL_SOURCES = [
-    "https://news.google.com/rss?hl=en-IN&gl=IN&ceid=IN:en",
-    "https://feeds.feedburner.com/ndtvnews-top-stories",
-    "https://www.hindustantimes.com/feeds/rss/india-news/rssfeed.xml",
-]
-
-NSE_BASE_SOURCES = [
-    "https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms",
-    "https://www.moneycontrol.com/rss/marketreports.xml",
-]
-
-BSE_SOURCES = [
-    "https://www.livemint.com/rss/markets",
-    "https://news.google.com/rss/search?q=BSE+Sensex+India+stock+market&hl=en-IN&gl=IN&ceid=IN:en",
+GOOGLE_SEARCH_FEEDS = [
+    "https://news.google.com/rss/search?q=breaking+news",
+    "https://news.google.com/rss/search?q=world+news",
+    "https://news.google.com/rss/search?q=India",
+    "https://news.google.com/rss/search?q=stock+market",
+    "https://news.google.com/rss/search?q=business",
+    "https://news.google.com/rss/search?q=technology",
 ]
 
 # -------------------------------------------------
-# NSE COMPANY LIST (EXTEND LATER)
+# SOURCE 2: GDELT (GLOBAL EVENTS DATA)
 # -------------------------------------------------
-NSE_COMPANIES = [
-    "Reliance Industries",
-    "Tata Motors",
-    "HDFC Bank",
-    "ICICI Bank",
-    "Infosys",
-    "TCS",
-    "Wipro",
-    "HUL",
-    "ITC",
-    "Adani Enterprises"
+def fetch_gdelt():
+    url = "https://api.gdeltproject.org/api/v2/doc/doc?query=global&mode=artlist&maxrecords=50&format=json"
+    try:
+        r = requests.get(url, timeout=10)
+        data = r.json()
+        return data.get("articles", [])
+    except:
+        return []
+
+# -------------------------------------------------
+# SOURCE 3: TWITTER SIGNALS (NITTER RSS)
+# -------------------------------------------------
+TWITTER_RSS = [
+    "https://nitter.net/search/rss?f=tweets&q=breaking+news",
+    "https://nitter.net/search/rss?f=tweets&q=stock+market",
+    "https://nitter.net/search/rss?f=tweets&q=India+news",
 ]
 
 # -------------------------------------------------
-# HELPER FUNCTIONS
+# HELPER
 # -------------------------------------------------
-def time_ago(published_time):
-    now = datetime.now(timezone.utc)
-    diff = now - published_time
-    seconds = int(diff.total_seconds())
-
-    if seconds < 60:
-        return f"{seconds}s ago"
-    if seconds < 3600:
-        return f"{seconds // 60}m ago"
-    if seconds < 86400:
-        return f"{seconds // 3600}h ago"
-    return f"{seconds // 86400}d ago"
-
-def process_sources(sources, company=None):
-    fresh = []
-
-    for src in sources:
-        feed = feedparser.parse(src)
-
-        for item in feed.entries:
-            text = f"{item.title} {getattr(item, 'summary', '')}".lower()
-
-            if company and company.lower() not in text:
-                continue
-
-            try:
-                pub_time = datetime(*item.published_parsed[:6], tzinfo=timezone.utc)
-            except:
-                continue
-
-            if pub_time < datetime.now(timezone.utc) - timedelta(minutes=latest_minutes):
-                continue
-
-            if pub_time <= st.session_state.last_check:
-                continue
-
-            if item.link in st.session_state.seen_links:
-                continue
-
-            fresh.append((pub_time, item))
-
-    fresh.sort(key=lambda x: x[0], reverse=True)
-    return fresh
-
-def google_company_feed(company):
-    q = urllib.parse.quote_plus(f"{company} NSE stock")
-    return f"https://news.google.com/rss/search?q={q}&hl=en-IN&gl=IN&ceid=IN:en"
+def is_recent(published):
+    return published >= datetime.now(timezone.utc) - timedelta(minutes=time_window)
 
 # -------------------------------------------------
 # LIVE MODE
 # -------------------------------------------------
 if st.session_state.live:
 
-    start_time = time.time()
+    start = time.time()
 
     with placeholder.container():
+
         st.subheader(f"Updated @ {datetime.utcnow().strftime('%H:%M:%S')} UTC")
 
-        # -----------------------------
-        # INDIA GENERAL
-        # -----------------------------
-        if "General" in news_type:
-            fresh_news = process_sources(INDIA_GENERAL_SOURCES)
+        news_items = []
 
-            if fresh_news:
-                st.success(f"🔥 {len(fresh_news)} NEW updates")
+        # -------- GOOGLE NEWS --------
+        for url in GOOGLE_SEARCH_FEEDS:
+            feed = feedparser.parse(url)
+            for item in feed.entries:
+                try:
+                    pub = datetime(*item.published_parsed[:6], tzinfo=timezone.utc)
+                except:
+                    continue
+                if not is_recent(pub):
+                    continue
+                if item.link in st.session_state.seen:
+                    continue
+                news_items.append(("Google", pub, item.title, item.link))
 
-                for pub_time, item in fresh_news:
-                    st.session_state.seen_links.add(item.link)
-                    st.markdown(f"### {item.title}")
-                    st.write(f"🕒 {time_ago(pub_time)}")
-                    st.markdown(f"[Open Article]({item.link})")
-                    st.divider()
-            else:
-                st.warning("No NEW breaking news. Showing latest headlines.")
-                for src in INDIA_GENERAL_SOURCES:
-                    feed = feedparser.parse(src)
-                    for item in feed.entries[:3]:
-                        st.markdown(f"### {item.title}")
-                        st.markdown(f"[Open Article]({item.link})")
-                        st.divider()
+        # -------- GDELT --------
+        for art in fetch_gdelt():
+            link = art.get("url")
+            title = art.get("title", "GDELT Event")
+            if link and link not in st.session_state.seen:
+                news_items.append(("GDELT", datetime.now(timezone.utc), title, link))
 
-            st.session_state.last_check = datetime.now(timezone.utc)
+        # -------- TWITTER SIGNALS --------
+        for url in TWITTER_RSS:
+            feed = feedparser.parse(url)
+            for item in feed.entries:
+                if item.link in st.session_state.seen:
+                    continue
+                news_items.append(("X/Twitter", datetime.now(timezone.utc), item.title, item.link))
 
-        # -----------------------------
-        # INDIA MARKET (NSE / BSE)
-        # -----------------------------
+        # -------- SORT & DISPLAY --------
+        news_items.sort(key=lambda x: x[1], reverse=True)
+
+        if not news_items:
+            st.warning("No new data in this cycle — feeds are quiet.")
         else:
-            tab_nse, tab_bse = st.tabs(["📊 NSE", "🏦 BSE"])
+            st.success(f"Showing {len(news_items)} live items")
 
-            # -------- NSE TAB --------
-            with tab_nse:
-                company = st.selectbox(
-                    "Filter NSE news by company (optional)",
-                    ["All Companies"] + NSE_COMPANIES
-                )
+        for source, pub, title, link in news_items[:100]:
+            st.session_state.seen.add(link)
+            st.markdown(f"### {title}")
+            st.write(f"🕒 {pub.strftime('%Y-%m-%d %H:%M:%S')} | 📡 {source}")
+            st.markdown(f"[Open]({link})")
+            st.divider()
 
-                sources = list(NSE_BASE_SOURCES)
-
-                if company != "All Companies":
-                    sources.append(google_company_feed(company))
-
-                fresh_news = process_sources(
-                    sources,
-                    None if company == "All Companies" else company
-                )
-
-                if fresh_news:
-                    for pub_time, item in fresh_news:
-                        st.session_state.seen_links.add(item.link)
-                        st.markdown(f"### {item.title}")
-                        st.write(f"🕒 {time_ago(pub_time)}")
-                        st.markdown(f"[Open Article]({item.link})")
-                        st.divider()
-                else:
-                    st.info("No NEW NSE updates")
-
-            # -------- BSE TAB --------
-            with tab_bse:
-                fresh_news = process_sources(BSE_SOURCES)
-
-                if fresh_news:
-                    for pub_time, item in fresh_news:
-                        st.session_state.seen_links.add(item.link)
-                        st.markdown(f"### {item.title}")
-                        st.write(f"🕒 {time_ago(pub_time)}")
-                        st.markdown(f"[Open Article]({item.link})")
-                        st.divider()
-                else:
-                    st.info("No NEW BSE updates")
-
-            st.session_state.last_check = datetime.now(timezone.utc)
-
-    elapsed = int(time.time() - start_time)
-    remaining = max(refresh_interval - elapsed, 0)
-
-    st.write(f"⏳ Next refresh in **{remaining}s**")
-
+    remaining = max(refresh_interval - int(time.time() - start), 0)
+    st.write(f"⏳ Next refresh in {remaining}s")
     time.sleep(remaining)
     st.rerun()
 
 else:
-    st.info("Click 🚀 Start Live Updates to begin streaming news.")
+    st.info("Click 🚀 Start Live to begin global aggregation.")
