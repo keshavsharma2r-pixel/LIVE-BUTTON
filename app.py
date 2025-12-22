@@ -2,14 +2,19 @@ import streamlit as st
 import feedparser
 import requests
 import time
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 import socket, urllib.parse
+
+# ------------------ TIMEZONE ------------------
+IST = ZoneInfo("Asia/Kolkata")
+UTC = ZoneInfo("UTC")
 
 socket.setdefaulttimeout(10)
 
 # ------------------ CONFIG ------------------
 st.set_page_config(layout="wide", page_title="News Intelligence Terminal")
-st.title("📰 News Intelligence Terminal")
+st.title("📰 News Intelligence Terminal (IST – New Delhi)")
 
 # ------------------ SESSION ------------------
 if "live" not in st.session_state:
@@ -24,7 +29,7 @@ if col1.button("🚀 Start Live"):
 if col2.button("🛑 Stop"):
     st.session_state.live = False
 
-refresh = st.slider("Refresh interval (sec)", 20, 120, 30)
+refresh = st.slider("Refresh interval (seconds)", 20, 120, 30)
 window = st.slider("Show news from last (minutes)", 60, 360, 180)
 
 # ------------------ LIVE BADGE ------------------
@@ -44,8 +49,9 @@ def safe_feed(url):
     except:
         return None
 
-def is_recent(dt):
-    return dt >= datetime.now(timezone.utc) - timedelta(minutes=window)
+def is_recent(dt_utc):
+    dt_ist = dt_utc.astimezone(IST)
+    return dt_ist >= datetime.now(IST) - timedelta(minutes=window)
 
 # ------------------ SOURCES ------------------
 GLOBAL_FEEDS = [
@@ -74,7 +80,7 @@ NSE_COMPANIES = [
     "ICICI Bank", "Infosys", "TCS", "Adani Enterprises"
 ]
 
-# ------------------ UI TABS (RESTORED) ------------------
+# ------------------ UI TABS ------------------
 tab_global, tab_india, tab_market = st.tabs(
     ["🌍 Global", "🇮🇳 India General", "📈 India Market"]
 )
@@ -82,31 +88,40 @@ tab_global, tab_india, tab_market = st.tabs(
 # ------------------ DISPLAY FUNCTION ------------------
 def render_news(feeds, company=None):
     items = []
+
     for url in feeds:
         feed = safe_feed(url)
         if not feed:
             continue
+
         for e in feed.entries:
             try:
-                pub = datetime(*e.published_parsed[:6], tzinfo=timezone.utc)
+                pub_utc = datetime(*e.published_parsed[:6], tzinfo=UTC)
             except:
                 continue
+
             text = f"{e.title} {getattr(e,'summary','')}".lower()
             if company and company.lower() not in text:
                 continue
-            if not is_recent(pub):
+
+            if not is_recent(pub_utc):
                 continue
+
             if e.link in st.session_state.seen:
                 continue
-            items.append((pub, e.title, e.link))
-    items.sort(reverse=True)
+
+            pub_ist = pub_utc.astimezone(IST)
+            items.append((pub_ist, e.title, e.link))
+
+    items.sort(key=lambda x: x[0], reverse=True)
 
     if not items:
         st.warning("No fresh news right now.")
-    for pub, title, link in items[:50]:
+
+    for pub_ist, title, link in items[:50]:
         st.session_state.seen.add(link)
         st.markdown(f"### {title}")
-        st.write(pub.strftime("%Y-%m-%d %H:%M"))
+        st.write(f"🕒 {pub_ist.strftime('%d %b %Y, %I:%M %p IST')}")
         st.markdown(f"[Open]({link})")
         st.divider()
 
@@ -139,6 +154,7 @@ with tab_market:
         if company != "All":
             q = urllib.parse.quote_plus(f"{company} NSE stock")
             feeds.append(f"https://news.google.com/rss/search?q={q}")
+
         if st.session_state.live:
             render_news(feeds, None if company == "All" else company)
         else:
@@ -152,5 +168,6 @@ with tab_market:
 
 # ------------------ AUTO REFRESH ------------------
 if st.session_state.live:
+    st.caption(f"Last updated: {datetime.now(IST).strftime('%d %b %Y, %I:%M:%S %p IST')}")
     time.sleep(refresh)
     st.rerun()
