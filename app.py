@@ -6,9 +6,9 @@ from datetime import datetime, timezone, timedelta
 # -------------------------------------------------
 # PAGE CONFIG
 # -------------------------------------------------
-st.set_page_config(layout="wide", page_title="LIVE NEWS – FLASHING BADGE")
+st.set_page_config(layout="wide", page_title="🇮🇳 LIVE INDIA NEWS")
 
-st.title("📰 LIVE NEWS (LATEST + FALLBACK)")
+st.title("🇮🇳 LIVE INDIA BREAKING NEWS")
 
 # -------------------------------------------------
 # SESSION STATE
@@ -37,7 +37,7 @@ refresh_interval = st.slider("Refresh Interval (seconds)", 5, 30, 10)
 latest_minutes = st.slider("Consider news from last (minutes)", 5, 60, 20)
 
 # -------------------------------------------------
-# FLASHING LIVE BADGE (CSS)
+# FLASHING LIVE BADGE
 # -------------------------------------------------
 if st.session_state.live:
     st.markdown(
@@ -58,7 +58,7 @@ if st.session_state.live:
             animation: pulse 1s infinite;
         }
         </style>
-        <div class="live-badge">🔴 LIVE</div>
+        <div class="live-badge">🔴 LIVE INDIA</div>
         """,
         unsafe_allow_html=True
     )
@@ -68,17 +68,18 @@ else:
 placeholder = st.empty()
 
 # -------------------------------------------------
-# LIVE SOURCES
+# 🇮🇳 INDIA LIVE SOURCES
 # -------------------------------------------------
 LIVE_SOURCES = [
-    "https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en",
-    "https://feeds.reuters.com/reuters/topNews",
-    "https://www.cnbc.com/id/100003114/device/rss/rss.html",
-    "https://feeds.bbci.co.uk/news/rss.xml",
+    "https://news.google.com/rss?hl=en-IN&gl=IN&ceid=IN:en",
+    "https://economictimes.indiatimes.com/rssfeedstopstories.cms",
+    "https://www.moneycontrol.com/rss/latestnews.xml",
+    "https://feeds.feedburner.com/ndtvnews-top-stories",
+    "https://www.hindustantimes.com/feeds/rss/india-news/rssfeed.xml",
 ]
 
 # -------------------------------------------------
-# HELPER: TIME AGO
+# HELPER
 # -------------------------------------------------
 def time_ago(published_time):
     now = datetime.now(timezone.utc)
@@ -133,7 +134,7 @@ if st.session_state.live:
         fresh_news.sort(key=lambda x: x[0], reverse=True)
 
         if fresh_news:
-            st.success(f"🔥 {len(fresh_news)} NEW breaking updates")
+            st.success(f"🔥 {len(fresh_news)} NEW INDIA updates")
 
             for pub_time, item in fresh_news:
                 st.session_state.seen_links.add(item.link)
@@ -146,7 +147,7 @@ if st.session_state.live:
             st.session_state.last_check = datetime.now(timezone.utc)
 
         else:
-            st.warning("No NEW breaking news. Showing latest available headlines.")
+            st.warning("No NEW breaking news. Showing latest Indian headlines.")
 
             fallback_news = []
             for src in LIVE_SOURCES:
@@ -167,4 +168,4 @@ if st.session_state.live:
     st.rerun()
 
 else:
-    st.info("Click 🚀 Start Live Updates to begin streaming news.")
+    st.info("Click 🚀 Start Live Updates to begin streaming India news.")
