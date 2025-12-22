@@ -2,13 +2,14 @@ import streamlit as st
 import time
 import feedparser
 from datetime import datetime, timezone, timedelta
+import urllib.parse
 
 # -------------------------------------------------
 # PAGE CONFIG
 # -------------------------------------------------
-st.set_page_config(layout="wide", page_title="🇮🇳 LIVE INDIA NEWS")
+st.set_page_config(layout="wide", page_title="🇮🇳 LIVE INDIA NEWS TERMINAL")
 
-st.title("🇮🇳 LIVE INDIA NEWS (GENERAL + MARKET + NSE/BSE)")
+st.title("🇮🇳 LIVE INDIA NEWS (GENERAL • MARKET • NSE • BSE)")
 
 # -------------------------------------------------
 # SESSION STATE
@@ -83,10 +84,9 @@ INDIA_GENERAL_SOURCES = [
     "https://www.hindustantimes.com/feeds/rss/india-news/rssfeed.xml",
 ]
 
-NSE_SOURCES = [
+NSE_BASE_SOURCES = [
     "https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms",
     "https://www.moneycontrol.com/rss/marketreports.xml",
-    "https://news.google.com/rss/search?q=NSE+India+stock+market&hl=en-IN&gl=IN&ceid=IN:en",
 ]
 
 BSE_SOURCES = [
@@ -95,7 +95,23 @@ BSE_SOURCES = [
 ]
 
 # -------------------------------------------------
-# HELPER
+# NSE COMPANY LIST (EXTEND LATER)
+# -------------------------------------------------
+NSE_COMPANIES = [
+    "Reliance Industries",
+    "Tata Motors",
+    "HDFC Bank",
+    "ICICI Bank",
+    "Infosys",
+    "TCS",
+    "Wipro",
+    "HUL",
+    "ITC",
+    "Adani Enterprises"
+]
+
+# -------------------------------------------------
+# HELPER FUNCTIONS
 # -------------------------------------------------
 def time_ago(published_time):
     now = datetime.now(timezone.utc)
@@ -110,13 +126,18 @@ def time_ago(published_time):
         return f"{seconds // 3600}h ago"
     return f"{seconds // 86400}d ago"
 
-def process_sources(sources):
+def process_sources(sources, company=None):
     fresh = []
 
     for src in sources:
         feed = feedparser.parse(src)
 
         for item in feed.entries:
+            text = f"{item.title} {getattr(item, 'summary', '')}".lower()
+
+            if company and company.lower() not in text:
+                continue
+
             try:
                 pub_time = datetime(*item.published_parsed[:6], tzinfo=timezone.utc)
             except:
@@ -135,6 +156,10 @@ def process_sources(sources):
 
     fresh.sort(key=lambda x: x[0], reverse=True)
     return fresh
+
+def google_company_feed(company):
+    q = urllib.parse.quote_plus(f"{company} NSE stock")
+    return f"https://news.google.com/rss/search?q={q}&hl=en-IN&gl=IN&ceid=IN:en"
 
 # -------------------------------------------------
 # LIVE MODE
@@ -161,12 +186,8 @@ if st.session_state.live:
                     st.write(f"🕒 {time_ago(pub_time)}")
                     st.markdown(f"[Open Article]({item.link})")
                     st.divider()
-
-                st.session_state.last_check = datetime.now(timezone.utc)
-
             else:
                 st.warning("No NEW breaking news. Showing latest headlines.")
-
                 for src in INDIA_GENERAL_SOURCES:
                     feed = feedparser.parse(src)
                     for item in feed.entries[:3]:
@@ -174,14 +195,31 @@ if st.session_state.live:
                         st.markdown(f"[Open Article]({item.link})")
                         st.divider()
 
+            st.session_state.last_check = datetime.now(timezone.utc)
+
         # -----------------------------
         # INDIA MARKET (NSE / BSE)
         # -----------------------------
         else:
             tab_nse, tab_bse = st.tabs(["📊 NSE", "🏦 BSE"])
 
+            # -------- NSE TAB --------
             with tab_nse:
-                fresh_news = process_sources(NSE_SOURCES)
+                company = st.selectbox(
+                    "Filter NSE news by company (optional)",
+                    ["All Companies"] + NSE_COMPANIES
+                )
+
+                sources = list(NSE_BASE_SOURCES)
+
+                if company != "All Companies":
+                    sources.append(google_company_feed(company))
+
+                fresh_news = process_sources(
+                    sources,
+                    None if company == "All Companies" else company
+                )
+
                 if fresh_news:
                     for pub_time, item in fresh_news:
                         st.session_state.seen_links.add(item.link)
@@ -192,8 +230,10 @@ if st.session_state.live:
                 else:
                     st.info("No NEW NSE updates")
 
+            # -------- BSE TAB --------
             with tab_bse:
                 fresh_news = process_sources(BSE_SOURCES)
+
                 if fresh_news:
                     for pub_time, item in fresh_news:
                         st.session_state.seen_links.add(item.link)
