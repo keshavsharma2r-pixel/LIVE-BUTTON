@@ -3,9 +3,12 @@ import time
 import feedparser
 from datetime import datetime, timezone, timedelta
 
-st.set_page_config(layout="wide", page_title="LIVE LATEST NEWS ONLY")
+# -------------------------------------------------
+# PAGE CONFIG
+# -------------------------------------------------
+st.set_page_config(layout="wide", page_title="LIVE NEWS – LATEST ONLY")
 
-st.title("📰 LIVE LATEST NEWS (NO OLD NEWS)")
+st.title("📰 LIVE NEWS (LATEST + FALLBACK)")
 
 # -------------------------------------------------
 # SESSION STATE
@@ -17,8 +20,8 @@ if "seen_links" not in st.session_state:
     st.session_state.seen_links = set()
 
 if "last_check" not in st.session_state:
-    # start by allowing last 10 minutes
-    st.session_state.last_check = datetime.now(timezone.utc) - timedelta(minutes=10)
+    # allow first run to show recent news
+    st.session_state.last_check = datetime.now(timezone.utc) - timedelta(minutes=30)
 
 # -------------------------------------------------
 # CONTROLS
@@ -32,20 +35,24 @@ if col2.button("🛑 Stop Live"):
     st.session_state.live = False
 
 refresh_interval = st.slider("Refresh Interval (seconds)", 5, 30, 10)
-latest_minutes = st.slider("Show news from last (minutes)", 1, 30, 5)
+latest_minutes = st.slider("Consider news from last (minutes)", 5, 60, 20)
+
+st.write("Live Mode:", st.session_state.live)
 
 placeholder = st.empty()
 
 # -------------------------------------------------
-# LIVE SOURCES
+# LIVE SOURCES (FAST + RELIABLE)
 # -------------------------------------------------
 LIVE_SOURCES = [
     "https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en",
-    "https://feeds.reuters.com/reuters/topNews"
+    "https://feeds.reuters.com/reuters/topNews",
+    "https://www.cnbc.com/id/100003114/device/rss/rss.html",
+    "https://feeds.bbci.co.uk/news/rss.xml",
 ]
 
 # -------------------------------------------------
-# HELPER
+# HELPER: TIME AGO
 # -------------------------------------------------
 def time_ago(published_time):
     now = datetime.now(timezone.utc)
@@ -56,7 +63,9 @@ def time_ago(published_time):
         return f"{seconds}s ago"
     if seconds < 3600:
         return f"{seconds // 60}m ago"
-    return f"{seconds // 3600}h ago"
+    if seconds < 86400:
+        return f"{seconds // 3600}h ago"
+    return f"{seconds // 86400}d ago"
 
 # -------------------------------------------------
 # LIVE MODE
@@ -67,30 +76,35 @@ if st.session_state.live:
 
     with placeholder.container():
 
-        st.subheader(f"🔴 LIVE FEED — latest only (updated {datetime.utcnow().strftime('%H:%M:%S')} UTC)")
+        st.subheader(
+            f"🔴 LIVE FEED — updated @ {datetime.utcnow().strftime('%H:%M:%S')} UTC"
+        )
 
         fresh_news = []
 
+        # -----------------------------
+        # FETCH & FILTER NEW NEWS
+        # -----------------------------
         for src in LIVE_SOURCES:
             feed = feedparser.parse(src)
 
             for item in feed.entries:
-
-                # published time check
                 try:
-                    pub_time = datetime(*item.published_parsed[:6], tzinfo=timezone.utc)
+                    pub_time = datetime(
+                        *item.published_parsed[:6], tzinfo=timezone.utc
+                    )
                 except:
                     continue
 
-                # 1️⃣ only latest X minutes
+                # only recent window
                 if pub_time < datetime.now(timezone.utc) - timedelta(minutes=latest_minutes):
                     continue
 
-                # 2️⃣ only new since last refresh
+                # only newer than last refresh
                 if pub_time <= st.session_state.last_check:
                     continue
 
-                # 3️⃣ no duplicates
+                # avoid duplicates
                 if item.link in st.session_state.seen_links:
                     continue
 
@@ -99,22 +113,44 @@ if st.session_state.live:
         # sort newest first
         fresh_news.sort(key=lambda x: x[0], reverse=True)
 
-        if not fresh_news:
-            st.info("No NEW breaking news in this interval.")
+        # -----------------------------
+        # DISPLAY LOGIC
+        # -----------------------------
+        if fresh_news:
+            st.success(f"🔥 {len(fresh_news)} NEW breaking updates")
 
-        for pub_time, item in fresh_news:
+            for pub_time, item in fresh_news:
+                st.session_state.seen_links.add(item.link)
 
-            st.session_state.seen_links.add(item.link)
+                st.markdown(f"### {item.title}")
+                st.write(f"🕒 {time_ago(pub_time)}")
+                st.markdown(f"[Open Article]({item.link})")
+                st.divider()
 
-            st.markdown(f"### {item.title}")
-            st.write(f"🕒 {time_ago(pub_time)}")
-            st.markdown(f"[Open Article]({item.link})")
-            st.divider()
+            # update last check only when new news appears
+            st.session_state.last_check = datetime.now(timezone.utc)
 
-        # update last check time
-        st.session_state.last_check = datetime.now(timezone.utc)
+        else:
+            # -----------------------------
+            # FALLBACK: SHOW LATEST HEADLINES
+            # -----------------------------
+            st.warning("No NEW breaking news. Showing latest available headlines.")
 
-    # countdown + rerun
+            fallback_news = []
+
+            for src in LIVE_SOURCES:
+                feed = feedparser.parse(src)
+                fallback_news.extend(feed.entries)
+
+            # show a few latest items
+            for item in fallback_news[:5]:
+                st.markdown(f"### {item.title}")
+                st.markdown(f"[Open Article]({item.link})")
+                st.divider()
+
+    # -----------------------------
+    # COUNTDOWN + RERUN
+    # -----------------------------
     elapsed = int(time.time() - start_time)
     remaining = max(refresh_interval - elapsed, 0)
 
@@ -123,5 +159,8 @@ if st.session_state.live:
     time.sleep(remaining)
     st.rerun()
 
+# -------------------------------------------------
+# LIVE MODE OFF
+# -------------------------------------------------
 else:
-    st.info("Click 🚀 Start Live Updates to begin.")
+    st.info("Click 🚀 Start Live Updates to begin streaming news.")
