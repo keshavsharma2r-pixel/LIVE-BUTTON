@@ -75,7 +75,7 @@ else:
 placeholder = st.empty()
 
 # -------------------------------------------------
-# 🇮🇳 SOURCES
+# SOURCES
 # -------------------------------------------------
 INDIA_GENERAL_SOURCES = [
     "https://news.google.com/rss?hl=en-IN&gl=IN&ceid=IN:en",
@@ -110,6 +110,32 @@ def time_ago(published_time):
         return f"{seconds // 3600}h ago"
     return f"{seconds // 86400}d ago"
 
+def process_sources(sources):
+    fresh = []
+
+    for src in sources:
+        feed = feedparser.parse(src)
+
+        for item in feed.entries:
+            try:
+                pub_time = datetime(*item.published_parsed[:6], tzinfo=timezone.utc)
+            except:
+                continue
+
+            if pub_time < datetime.now(timezone.utc) - timedelta(minutes=latest_minutes):
+                continue
+
+            if pub_time <= st.session_state.last_check:
+                continue
+
+            if item.link in st.session_state.seen_links:
+                continue
+
+            fresh.append((pub_time, item))
+
+    fresh.sort(key=lambda x: x[0], reverse=True)
+    return fresh
+
 # -------------------------------------------------
 # LIVE MODE
 # -------------------------------------------------
@@ -118,54 +144,10 @@ if st.session_state.live:
     start_time = time.time()
 
     with placeholder.container():
-
         st.subheader(f"Updated @ {datetime.utcnow().strftime('%H:%M:%S')} UTC")
 
         # -----------------------------
-        # GENERAL NEWS
-        # -----------------------------
-        if "General" in news_type:
-            active_sources = INDIA_GENERAL_SOURCES
-
-        # -----------------------------
-        # MARKET NEWS WITH NSE/BSE TABS
-        # -----------------------------
-        else:
-            tab_nse, tab_bse = st.tabs(["📊 NSE", "🏦 BSE"])
-
-        # -----------------------------
-        # FUNCTION TO PROCESS FEEDS
-        # -----------------------------
-        def process_sources(sources):
-            fresh = []
-
-            for src in sources:
-                feed = feedparser.parse(src)
-
-                for item in feed.entries:
-                    try:
-                        pub_time = datetime(
-                            *item.published_parsed[:6], tzinfo=timezone.utc
-                        )
-                    except:
-                        continue
-
-                    if pub_time < datetime.now(timezone.utc) - timedelta(minutes=latest_minutes):
-                        continue
-
-                    if pub_time <= st.session_state.last_check:
-                        continue
-
-                    if item.link in st.session_state.seen_links:
-                        continue
-
-                    fresh.append((pub_time, item))
-
-            fresh.sort(key=lambda x: x[0], reverse=True)
-            return fresh
-
-        # -----------------------------
-        # DISPLAY GENERAL
+        # INDIA GENERAL
         # -----------------------------
         if "General" in news_type:
             fresh_news = process_sources(INDIA_GENERAL_SOURCES)
@@ -184,4 +166,53 @@ if st.session_state.live:
 
             else:
                 st.warning("No NEW breaking news. Showing latest headlines.")
+
                 for src in INDIA_GENERAL_SOURCES:
+                    feed = feedparser.parse(src)
+                    for item in feed.entries[:3]:
+                        st.markdown(f"### {item.title}")
+                        st.markdown(f"[Open Article]({item.link})")
+                        st.divider()
+
+        # -----------------------------
+        # INDIA MARKET (NSE / BSE)
+        # -----------------------------
+        else:
+            tab_nse, tab_bse = st.tabs(["📊 NSE", "🏦 BSE"])
+
+            with tab_nse:
+                fresh_news = process_sources(NSE_SOURCES)
+                if fresh_news:
+                    for pub_time, item in fresh_news:
+                        st.session_state.seen_links.add(item.link)
+                        st.markdown(f"### {item.title}")
+                        st.write(f"🕒 {time_ago(pub_time)}")
+                        st.markdown(f"[Open Article]({item.link})")
+                        st.divider()
+                else:
+                    st.info("No NEW NSE updates")
+
+            with tab_bse:
+                fresh_news = process_sources(BSE_SOURCES)
+                if fresh_news:
+                    for pub_time, item in fresh_news:
+                        st.session_state.seen_links.add(item.link)
+                        st.markdown(f"### {item.title}")
+                        st.write(f"🕒 {time_ago(pub_time)}")
+                        st.markdown(f"[Open Article]({item.link})")
+                        st.divider()
+                else:
+                    st.info("No NEW BSE updates")
+
+            st.session_state.last_check = datetime.now(timezone.utc)
+
+    elapsed = int(time.time() - start_time)
+    remaining = max(refresh_interval - elapsed, 0)
+
+    st.write(f"⏳ Next refresh in **{remaining}s**")
+
+    time.sleep(remaining)
+    st.rerun()
+
+else:
+    st.info("Click 🚀 Start Live Updates to begin streaming news.")
