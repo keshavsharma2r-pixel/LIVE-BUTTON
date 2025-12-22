@@ -8,7 +8,7 @@ from datetime import datetime, timezone, timedelta
 # -------------------------------------------------
 st.set_page_config(layout="wide", page_title="🇮🇳 LIVE INDIA NEWS")
 
-st.title("🇮🇳 LIVE INDIA NEWS (GENERAL + MARKET)")
+st.title("🇮🇳 LIVE INDIA NEWS (GENERAL + MARKET + NSE/BSE)")
 
 # -------------------------------------------------
 # SESSION STATE
@@ -23,10 +23,10 @@ if "last_check" not in st.session_state:
     st.session_state.last_check = datetime.now(timezone.utc) - timedelta(minutes=30)
 
 # -------------------------------------------------
-# CONTROLS
+# TOP CONTROLS
 # -------------------------------------------------
 news_type = st.radio(
-    "Select News Type",
+    "Select News Category",
     ["🇮🇳 India – General", "📈 India – Market"],
     horizontal=True
 )
@@ -75,7 +75,7 @@ else:
 placeholder = st.empty()
 
 # -------------------------------------------------
-# 🇮🇳 LIVE SOURCES
+# 🇮🇳 SOURCES
 # -------------------------------------------------
 INDIA_GENERAL_SOURCES = [
     "https://news.google.com/rss?hl=en-IN&gl=IN&ceid=IN:en",
@@ -83,14 +83,16 @@ INDIA_GENERAL_SOURCES = [
     "https://www.hindustantimes.com/feeds/rss/india-news/rssfeed.xml",
 ]
 
-INDIA_MARKET_SOURCES = [
+NSE_SOURCES = [
     "https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms",
     "https://www.moneycontrol.com/rss/marketreports.xml",
-    "https://www.livemint.com/rss/markets",
-    "https://news.google.com/rss/search?q=India+stock+market+NSE+Sensex&hl=en-IN&gl=IN&ceid=IN:en",
+    "https://news.google.com/rss/search?q=NSE+India+stock+market&hl=en-IN&gl=IN&ceid=IN:en",
 ]
 
-LIVE_SOURCES = INDIA_GENERAL_SOURCES if "General" in news_type else INDIA_MARKET_SOURCES
+BSE_SOURCES = [
+    "https://www.livemint.com/rss/markets",
+    "https://news.google.com/rss/search?q=BSE+Sensex+India+stock+market&hl=en-IN&gl=IN&ceid=IN:en",
+]
 
 # -------------------------------------------------
 # HELPER
@@ -117,69 +119,69 @@ if st.session_state.live:
 
     with placeholder.container():
 
-        st.subheader(
-            f"Updated @ {datetime.utcnow().strftime('%H:%M:%S')} UTC"
-        )
+        st.subheader(f"Updated @ {datetime.utcnow().strftime('%H:%M:%S')} UTC")
 
-        fresh_news = []
+        # -----------------------------
+        # GENERAL NEWS
+        # -----------------------------
+        if "General" in news_type:
+            active_sources = INDIA_GENERAL_SOURCES
 
-        for src in LIVE_SOURCES:
-            feed = feedparser.parse(src)
-
-            for item in feed.entries:
-                try:
-                    pub_time = datetime(
-                        *item.published_parsed[:6], tzinfo=timezone.utc
-                    )
-                except:
-                    continue
-
-                if pub_time < datetime.now(timezone.utc) - timedelta(minutes=latest_minutes):
-                    continue
-
-                if pub_time <= st.session_state.last_check:
-                    continue
-
-                if item.link in st.session_state.seen_links:
-                    continue
-
-                fresh_news.append((pub_time, item))
-
-        fresh_news.sort(key=lambda x: x[0], reverse=True)
-
-        if fresh_news:
-            st.success(f"🔥 {len(fresh_news)} NEW updates")
-
-            for pub_time, item in fresh_news:
-                st.session_state.seen_links.add(item.link)
-
-                st.markdown(f"### {item.title}")
-                st.write(f"🕒 {time_ago(pub_time)}")
-                st.markdown(f"[Open Article]({item.link})")
-                st.divider()
-
-            st.session_state.last_check = datetime.now(timezone.utc)
-
+        # -----------------------------
+        # MARKET NEWS WITH NSE/BSE TABS
+        # -----------------------------
         else:
-            st.warning("No NEW breaking news. Showing latest headlines.")
+            tab_nse, tab_bse = st.tabs(["📊 NSE", "🏦 BSE"])
 
-            fallback_news = []
-            for src in LIVE_SOURCES:
+        # -----------------------------
+        # FUNCTION TO PROCESS FEEDS
+        # -----------------------------
+        def process_sources(sources):
+            fresh = []
+
+            for src in sources:
                 feed = feedparser.parse(src)
-                fallback_news.extend(feed.entries)
 
-            for item in fallback_news[:5]:
-                st.markdown(f"### {item.title}")
-                st.markdown(f"[Open Article]({item.link})")
-                st.divider()
+                for item in feed.entries:
+                    try:
+                        pub_time = datetime(
+                            *item.published_parsed[:6], tzinfo=timezone.utc
+                        )
+                    except:
+                        continue
 
-    elapsed = int(time.time() - start_time)
-    remaining = max(refresh_interval - elapsed, 0)
+                    if pub_time < datetime.now(timezone.utc) - timedelta(minutes=latest_minutes):
+                        continue
 
-    st.write(f"⏳ Next refresh in **{remaining}s**")
+                    if pub_time <= st.session_state.last_check:
+                        continue
 
-    time.sleep(remaining)
-    st.rerun()
+                    if item.link in st.session_state.seen_links:
+                        continue
 
-else:
-    st.info("Click 🚀 Start Live Updates to begin streaming news.")
+                    fresh.append((pub_time, item))
+
+            fresh.sort(key=lambda x: x[0], reverse=True)
+            return fresh
+
+        # -----------------------------
+        # DISPLAY GENERAL
+        # -----------------------------
+        if "General" in news_type:
+            fresh_news = process_sources(INDIA_GENERAL_SOURCES)
+
+            if fresh_news:
+                st.success(f"🔥 {len(fresh_news)} NEW updates")
+
+                for pub_time, item in fresh_news:
+                    st.session_state.seen_links.add(item.link)
+                    st.markdown(f"### {item.title}")
+                    st.write(f"🕒 {time_ago(pub_time)}")
+                    st.markdown(f"[Open Article]({item.link})")
+                    st.divider()
+
+                st.session_state.last_check = datetime.now(timezone.utc)
+
+            else:
+                st.warning("No NEW breaking news. Showing latest headlines.")
+                for src in INDIA_GENERAL_SOURCES:
