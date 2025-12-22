@@ -8,7 +8,7 @@ from datetime import datetime, timezone, timedelta
 # -------------------------------------------------
 st.set_page_config(layout="wide", page_title="🇮🇳 LIVE INDIA NEWS")
 
-st.title("🇮🇳 LIVE INDIA BREAKING NEWS")
+st.title("🇮🇳 LIVE INDIA NEWS (GENERAL + MARKET)")
 
 # -------------------------------------------------
 # SESSION STATE
@@ -25,6 +25,12 @@ if "last_check" not in st.session_state:
 # -------------------------------------------------
 # CONTROLS
 # -------------------------------------------------
+news_type = st.radio(
+    "Select News Type",
+    ["🇮🇳 India – General", "📈 India – Market"],
+    horizontal=True
+)
+
 col1, col2 = st.columns(2)
 
 if col1.button("🚀 Start Live Updates"):
@@ -40,15 +46,16 @@ latest_minutes = st.slider("Consider news from last (minutes)", 5, 60, 20)
 # FLASHING LIVE BADGE
 # -------------------------------------------------
 if st.session_state.live:
+    badge_text = "🔴 LIVE INDIA" if "General" in news_type else "🔴 LIVE MARKET"
     st.markdown(
-        """
+        f"""
         <style>
-        @keyframes pulse {
-            0% { opacity: 1; }
-            50% { opacity: 0.3; }
-            100% { opacity: 1; }
-        }
-        .live-badge {
+        @keyframes pulse {{
+            0% {{ opacity: 1; }}
+            50% {{ opacity: 0.3; }}
+            100% {{ opacity: 1; }}
+        }}
+        .live-badge {{
             color: white;
             background: red;
             padding: 6px 12px;
@@ -56,9 +63,9 @@ if st.session_state.live:
             font-weight: bold;
             display: inline-block;
             animation: pulse 1s infinite;
-        }
+        }}
         </style>
-        <div class="live-badge">🔴 LIVE INDIA</div>
+        <div class="live-badge">{badge_text}</div>
         """,
         unsafe_allow_html=True
     )
@@ -68,15 +75,22 @@ else:
 placeholder = st.empty()
 
 # -------------------------------------------------
-# 🇮🇳 INDIA LIVE SOURCES
+# 🇮🇳 LIVE SOURCES
 # -------------------------------------------------
-LIVE_SOURCES = [
+INDIA_GENERAL_SOURCES = [
     "https://news.google.com/rss?hl=en-IN&gl=IN&ceid=IN:en",
-    "https://economictimes.indiatimes.com/rssfeedstopstories.cms",
-    "https://www.moneycontrol.com/rss/latestnews.xml",
     "https://feeds.feedburner.com/ndtvnews-top-stories",
     "https://www.hindustantimes.com/feeds/rss/india-news/rssfeed.xml",
 ]
+
+INDIA_MARKET_SOURCES = [
+    "https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms",
+    "https://www.moneycontrol.com/rss/marketreports.xml",
+    "https://www.livemint.com/rss/markets",
+    "https://news.google.com/rss/search?q=India+stock+market+NSE+Sensex&hl=en-IN&gl=IN&ceid=IN:en",
+]
+
+LIVE_SOURCES = INDIA_GENERAL_SOURCES if "General" in news_type else INDIA_MARKET_SOURCES
 
 # -------------------------------------------------
 # HELPER
@@ -134,7 +148,7 @@ if st.session_state.live:
         fresh_news.sort(key=lambda x: x[0], reverse=True)
 
         if fresh_news:
-            st.success(f"🔥 {len(fresh_news)} NEW INDIA updates")
+            st.success(f"🔥 {len(fresh_news)} NEW updates")
 
             for pub_time, item in fresh_news:
                 st.session_state.seen_links.add(item.link)
@@ -147,7 +161,7 @@ if st.session_state.live:
             st.session_state.last_check = datetime.now(timezone.utc)
 
         else:
-            st.warning("No NEW breaking news. Showing latest Indian headlines.")
+            st.warning("No NEW breaking news. Showing latest headlines.")
 
             fallback_news = []
             for src in LIVE_SOURCES:
@@ -168,4 +182,4 @@ if st.session_state.live:
     st.rerun()
 
 else:
-    st.info("Click 🚀 Start Live Updates to begin streaming India news.")
+    st.info("Click 🚀 Start Live Updates to begin streaming news.")
