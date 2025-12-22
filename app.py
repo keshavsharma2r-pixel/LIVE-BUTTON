@@ -3,176 +3,154 @@ import feedparser
 import requests
 import time
 from datetime import datetime, timezone, timedelta
-import socket
+import socket, urllib.parse
 
 socket.setdefaulttimeout(10)
 
-# -------------------------------------------------
-# PAGE CONFIG
-# -------------------------------------------------
-st.set_page_config(layout="wide", page_title="GLOBAL NEWS INTELLIGENCE")
+# ------------------ CONFIG ------------------
+st.set_page_config(layout="wide", page_title="News Intelligence Terminal")
+st.title("📰 News Intelligence Terminal")
 
-st.title("🌍 GLOBAL NEWS INTELLIGENCE ENGINE (STABLE)")
-
-# -------------------------------------------------
-# SESSION STATE
-# -------------------------------------------------
+# ------------------ SESSION ------------------
 if "live" not in st.session_state:
     st.session_state.live = False
-
 if "seen" not in st.session_state:
     st.session_state.seen = set()
 
-# -------------------------------------------------
-# CONTROLS
-# -------------------------------------------------
+# ------------------ CONTROLS ------------------
 col1, col2 = st.columns(2)
-
 if col1.button("🚀 Start Live"):
     st.session_state.live = True
-
 if col2.button("🛑 Stop"):
     st.session_state.live = False
 
-refresh_interval = st.slider("Refresh interval (seconds)", 15, 120, 30)
-time_window = st.slider("Show news from last (minutes)", 60, 360, 180)
+refresh = st.slider("Refresh interval (sec)", 20, 120, 30)
+window = st.slider("Show news from last (minutes)", 60, 360, 180)
 
-# -------------------------------------------------
-# LIVE BADGE
-# -------------------------------------------------
+# ------------------ LIVE BADGE ------------------
 if st.session_state.live:
     st.markdown(
-        """
-        <style>
-        @keyframes pulse { 0%{opacity:1;} 50%{opacity:.3;} 100%{opacity:1;} }
-        .live { background:red;color:white;padding:6px 12px;
-                border-radius:6px;font-weight:bold;animation:pulse 1s infinite; }
-        </style>
-        <div class="live">🔴 LIVE</div>
-        """,
+        "<div style='color:white;background:red;padding:6px 12px;"
+        "border-radius:6px;font-weight:bold;'>🔴 LIVE</div>",
         unsafe_allow_html=True
     )
 else:
-    st.markdown("⚪ LIVE OFF")
+    st.info("Live mode OFF")
 
-placeholder = st.empty()
+# ------------------ SAFE FETCH ------------------
+def safe_feed(url):
+    try:
+        return feedparser.parse(url)
+    except:
+        return None
 
-# -------------------------------------------------
-# FEEDS (MAX COVERAGE)
-# -------------------------------------------------
-GOOGLE_FEEDS = [
+def is_recent(dt):
+    return dt >= datetime.now(timezone.utc) - timedelta(minutes=window)
+
+# ------------------ SOURCES ------------------
+GLOBAL_FEEDS = [
     "https://news.google.com/rss/search?q=breaking+news",
     "https://news.google.com/rss/search?q=world+news",
-    "https://news.google.com/rss/search?q=India",
-    "https://news.google.com/rss/search?q=stock+market",
     "https://news.google.com/rss/search?q=business",
     "https://news.google.com/rss/search?q=technology",
 ]
 
-TWITTER_RSS = [
-    "https://nitter.net/search/rss?f=tweets&q=breaking+news",
-    "https://nitter.net/search/rss?f=tweets&q=stock+market",
+INDIA_GENERAL = [
+    "https://news.google.com/rss/search?q=India",
+    "https://feeds.feedburner.com/ndtvnews-top-stories",
 ]
 
-# -------------------------------------------------
-# SAFE HELPERS
-# -------------------------------------------------
-def safe_feed(url):
-    try:
-        return feedparser.parse(url)
-    except Exception:
-        return None
+NSE_BASE = [
+    "https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms",
+    "https://www.moneycontrol.com/rss/marketreports.xml",
+]
 
-def fetch_gdelt():
-    try:
-        r = requests.get(
-            "https://api.gdeltproject.org/api/v2/doc/doc",
-            params={
-                "query": "global",
-                "mode": "artlist",
-                "maxrecords": 50,
-                "format": "json"
-            },
-            timeout=10
-        )
-        return r.json().get("articles", [])
-    except Exception:
-        return []
+BSE_BASE = [
+    "https://www.livemint.com/rss/markets",
+]
 
-def is_recent(dt):
-    return dt >= datetime.now(timezone.utc) - timedelta(minutes=time_window)
+NSE_COMPANIES = [
+    "Reliance Industries", "Tata Motors", "HDFC Bank",
+    "ICICI Bank", "Infosys", "TCS", "Adani Enterprises"
+]
 
-# -------------------------------------------------
-# LIVE MODE
-# -------------------------------------------------
-if st.session_state.live:
+# ------------------ UI TABS (RESTORED) ------------------
+tab_global, tab_india, tab_market = st.tabs(
+    ["🌍 Global", "🇮🇳 India General", "📈 India Market"]
+)
 
-    start = time.time()
+# ------------------ DISPLAY FUNCTION ------------------
+def render_news(feeds, company=None):
     items = []
-
-    with placeholder.container():
-
-        st.subheader(f"Updated @ {datetime.utcnow().strftime('%H:%M:%S')} UTC")
-
-        # ---------- GOOGLE NEWS ----------
-        for url in GOOGLE_FEEDS:
-            feed = safe_feed(url)
-            if not feed:
+    for url in feeds:
+        feed = safe_feed(url)
+        if not feed:
+            continue
+        for e in feed.entries:
+            try:
+                pub = datetime(*e.published_parsed[:6], tzinfo=timezone.utc)
+            except:
                 continue
-
-            for e in feed.entries:
-                try:
-                    pub = datetime(*e.published_parsed[:6], tzinfo=timezone.utc)
-                except:
-                    continue
-
-                if not is_recent(pub):
-                    continue
-                if e.link in st.session_state.seen:
-                    continue
-
-                items.append(("Google", pub, e.title, e.link))
-
-        # ---------- GDELT ----------
-        for art in fetch_gdelt():
-            link = art.get("url")
-            title = art.get("title", "GDELT Event")
-
-            if not link or link in st.session_state.seen:
+            text = f"{e.title} {getattr(e,'summary','')}".lower()
+            if company and company.lower() not in text:
                 continue
-
-            items.append(("GDELT", datetime.now(timezone.utc), title, link))
-
-        # ---------- TWITTER SIGNALS ----------
-        for url in TWITTER_RSS:
-            feed = safe_feed(url)
-            if not feed:
+            if not is_recent(pub):
                 continue
+            if e.link in st.session_state.seen:
+                continue
+            items.append((pub, e.title, e.link))
+    items.sort(reverse=True)
 
-            for e in feed.entries:
-                if e.link in st.session_state.seen:
-                    continue
-                items.append(("X/Twitter", datetime.now(timezone.utc), e.title, e.link))
+    if not items:
+        st.warning("No fresh news right now.")
+    for pub, title, link in items[:50]:
+        st.session_state.seen.add(link)
+        st.markdown(f"### {title}")
+        st.write(pub.strftime("%Y-%m-%d %H:%M"))
+        st.markdown(f"[Open]({link})")
+        st.divider()
 
-        # ---------- DISPLAY ----------
-        items.sort(key=lambda x: x[1], reverse=True)
+# ------------------ TAB: GLOBAL ------------------
+with tab_global:
+    st.subheader("🌍 Global Coverage")
+    if st.session_state.live:
+        render_news(GLOBAL_FEEDS)
+    else:
+        st.info("Start live to see global news")
 
-        if not items:
-            st.warning("Feeds are temporarily quiet or blocked.")
+# ------------------ TAB: INDIA ------------------
+with tab_india:
+    st.subheader("🇮🇳 India – General")
+    if st.session_state.live:
+        render_news(INDIA_GENERAL)
+    else:
+        st.info("Start live to see India news")
+
+# ------------------ TAB: MARKET ------------------
+with tab_market:
+    tab_nse, tab_bse = st.tabs(["📊 NSE", "🏦 BSE"])
+
+    with tab_nse:
+        company = st.selectbox(
+            "Filter NSE by company (optional)",
+            ["All"] + NSE_COMPANIES
+        )
+        feeds = list(NSE_BASE)
+        if company != "All":
+            q = urllib.parse.quote_plus(f"{company} NSE stock")
+            feeds.append(f"https://news.google.com/rss/search?q={q}")
+        if st.session_state.live:
+            render_news(feeds, None if company == "All" else company)
         else:
-            st.success(f"Showing {len(items)} live items")
+            st.info("Start live to see NSE news")
 
-        for src, pub, title, link in items[:100]:
-            st.session_state.seen.add(link)
-            st.markdown(f"### {title}")
-            st.write(f"🕒 {pub.strftime('%Y-%m-%d %H:%M:%S')} | 📡 {src}")
-            st.markdown(f"[Open]({link})")
-            st.divider()
+    with tab_bse:
+        if st.session_state.live:
+            render_news(BSE_BASE)
+        else:
+            st.info("Start live to see BSE news")
 
-    remaining = max(refresh_interval - int(time.time() - start), 0)
-    st.write(f"⏳ Next refresh in {remaining}s")
-    time.sleep(remaining)
+# ------------------ AUTO REFRESH ------------------
+if st.session_state.live:
+    time.sleep(refresh)
     st.rerun()
-
-else:
-    st.info("Click 🚀 Start Live to begin global aggregation.")
