@@ -27,13 +27,17 @@ if "seen" not in st.session_state:
 if "selected_date" not in st.session_state:
     st.session_state.selected_date = date.today()
 
+if "date_applied" not in st.session_state:
+    st.session_state.date_applied = st.session_state.selected_date
+
 # ================== CONTROLS ==================
 col1, col2 = st.columns(2)
 
 if col1.button("🚀 Start Live"):
     st.session_state.live = True
     st.session_state.search_only = False
-    st.session_state.selected_date = date.today()   # 🔥 RESET TO TODAY
+    st.session_state.selected_date = date.today()
+    st.session_state.date_applied = date.today()   # 🔥 force live date
     st.session_state.seen = set()
 
 if col2.button("🛑 Stop"):
@@ -56,12 +60,23 @@ with search_col2:
         st.session_state.live = False
         st.session_state.seen = set()
 
-# ================== CALENDAR ==================
-st.session_state.selected_date = st.date_input(
-    "📅 Select date (IST)",
-    value=st.session_state.selected_date,
-    max_value=date.today()
-)
+# ================== CALENDAR + APPLY ==================
+date_col1, date_col2 = st.columns([3, 1])
+
+with date_col1:
+    temp_date = st.date_input(
+        "📅 Select date (IST)",
+        value=st.session_state.selected_date,
+        max_value=date.today()
+    )
+
+with date_col2:
+    if st.button("📅 Apply Date"):
+        st.session_state.selected_date = temp_date
+        st.session_state.date_applied = temp_date
+        st.session_state.live = False
+        st.session_state.search_only = False
+        st.session_state.seen = set()
 
 # ================== LIVE DATE & TIME ==================
 now_ist = datetime.now(IST)
@@ -79,7 +94,7 @@ st.markdown(
 )
 
 # ================== MODE INDICATOR ==================
-is_today = st.session_state.selected_date == date.today()
+is_today = st.session_state.date_applied == date.today()
 
 if st.session_state.search_only:
     st.success("🔍 SEARCH MODE (Live disabled)")
@@ -92,7 +107,7 @@ elif st.session_state.live and is_today:
 elif st.session_state.live:
     st.warning("Live paused (historical date)")
 else:
-    st.info("Live mode OFF")
+    st.info(f"Showing news for {st.session_state.date_applied.strftime('%d %b %Y')}")
 
 # ================== HELPERS ==================
 def safe_feed(url):
@@ -102,7 +117,7 @@ def safe_feed(url):
         return None
 
 def in_selected_date(pub_utc):
-    return pub_utc.astimezone(IST).date() == st.session_state.selected_date
+    return pub_utc.astimezone(IST).date() == st.session_state.date_applied
 
 def matches_search(text):
     if not search_query:
@@ -206,7 +221,7 @@ with tab_market:
     with tab_bse:
         render_news(BSE_BASE)
 
-# ================== AUTO REFRESH ==================
+# ================== AUTO REFRESH (LIVE ONLY) ==================
 if st.session_state.live and is_today:
     st.caption(
         f"Last updated: {datetime.now(IST).strftime('%d %b %Y, %I:%M:%S %p IST')}"
