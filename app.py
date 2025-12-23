@@ -1,8 +1,7 @@
 import streamlit as st
 import feedparser
-import requests
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from zoneinfo import ZoneInfo
 import socket, urllib.parse
 
@@ -33,7 +32,13 @@ if col2.button("🛑 Stop"):
     st.session_state.live = False
 
 refresh = st.slider("Refresh interval (seconds)", 20, 120, 30)
-window = st.slider("Show news from last (minutes)", 60, 360, 180)
+
+# ------------------ CALENDAR DATE PICKER ------------------
+selected_date = st.date_input(
+    "📅 Select date (IST)",
+    value=date.today(),
+    max_value=date.today()
+)
 
 # ------------------ LIVE DATE & TIME (IST) ------------------
 now_ist = datetime.now(IST)
@@ -58,12 +63,16 @@ st.markdown(
 )
 
 # ------------------ LIVE BADGE ------------------
-if st.session_state.live:
+is_today = selected_date == date.today()
+
+if st.session_state.live and is_today:
     st.markdown(
         "<div style='color:white;background:red;padding:6px 12px;"
         "border-radius:6px;font-weight:bold;margin-top:8px;'>🔴 LIVE</div>",
         unsafe_allow_html=True
     )
+elif st.session_state.live and not is_today:
+    st.warning("Live mode paused (viewing historical date)")
 else:
     st.info("Live mode OFF")
 
@@ -74,8 +83,9 @@ def safe_feed(url):
     except:
         return None
 
-def is_recent(dt_utc):
-    return dt_utc.astimezone(IST) >= datetime.now(IST) - timedelta(minutes=window)
+def in_selected_date(pub_utc):
+    pub_ist = pub_utc.astimezone(IST)
+    return pub_ist.date() == selected_date
 
 # ------------------ SOURCES ------------------
 GLOBAL_FEEDS = [
@@ -129,11 +139,11 @@ def render_news(feeds, company=None):
             except:
                 continue
 
-            text = f"{e.title} {getattr(e,'summary','')}".lower()
-            if company and company.lower() not in text:
+            if not in_selected_date(pub_utc):
                 continue
 
-            if not is_recent(pub_utc):
+            text = f"{e.title} {getattr(e,'summary','')}".lower()
+            if company and company.lower() not in text:
                 continue
 
             if e.link in st.session_state.seen:
@@ -144,7 +154,7 @@ def render_news(feeds, company=None):
     items.sort(key=lambda x: x[0], reverse=True)
 
     if not items:
-        st.warning("No fresh news right now.")
+        st.warning("No news found for this date.")
 
     for pub, title, link in items[:50]:
         st.session_state.seen.add(link)
@@ -156,18 +166,12 @@ def render_news(feeds, company=None):
 # ------------------ GLOBAL TAB ------------------
 with tab_global:
     st.subheader("🌍 Global News")
-    if st.session_state.live:
-        render_news(GLOBAL_FEEDS)
-    else:
-        st.info("Start Live to view global news")
+    render_news(GLOBAL_FEEDS)
 
 # ------------------ INDIA TAB ------------------
 with tab_india:
     st.subheader("🇮🇳 India – General News")
-    if st.session_state.live:
-        render_news(INDIA_GENERAL)
-    else:
-        st.info("Start Live to view India news")
+    render_news(INDIA_GENERAL)
 
 # ------------------ MARKET TAB ------------------
 with tab_market:
@@ -184,19 +188,13 @@ with tab_market:
             q = urllib.parse.quote_plus(f"{company} NSE stock")
             feeds.append(f"https://news.google.com/rss/search?q={q}")
 
-        if st.session_state.live:
-            render_news(feeds, None if company == "All" else company)
-        else:
-            st.info("Start Live to view NSE news")
+        render_news(feeds, None if company == "All" else company)
 
     with tab_bse:
-        if st.session_state.live:
-            render_news(BSE_BASE)
-        else:
-            st.info("Start Live to view BSE news")
+        render_news(BSE_BASE)
 
 # ------------------ AUTO REFRESH ------------------
-if st.session_state.live:
+if st.session_state.live and is_today:
     st.caption(
         f"Last updated: {datetime.now(IST).strftime('%d %b %Y, %I:%M:%S %p IST')}"
     )
