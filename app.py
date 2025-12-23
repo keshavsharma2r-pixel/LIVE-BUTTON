@@ -33,16 +33,21 @@ if col2.button("🛑 Stop"):
 
 refresh = st.slider("Refresh interval (seconds)", 20, 120, 30)
 
-# ------------------ CALENDAR DATE PICKER ------------------
+# ------------------ SEARCH ------------------
+search_query = st.text_input(
+    "🔍 Search news (company, topic, keyword)",
+    placeholder="e.g. Reliance, inflation, IPO"
+).strip().lower()
+
+# ------------------ CALENDAR ------------------
 selected_date = st.date_input(
     "📅 Select date (IST)",
     value=date.today(),
     max_value=date.today()
 )
 
-# ------------------ LIVE DATE & TIME (IST) ------------------
+# ------------------ LIVE DATE & TIME ------------------
 now_ist = datetime.now(IST)
-
 st.markdown(
     f"""
     <div style="
@@ -76,7 +81,7 @@ elif st.session_state.live and not is_today:
 else:
     st.info("Live mode OFF")
 
-# ------------------ SAFE HELPERS ------------------
+# ------------------ HELPERS ------------------
 def safe_feed(url):
     try:
         return feedparser.parse(url)
@@ -84,8 +89,12 @@ def safe_feed(url):
         return None
 
 def in_selected_date(pub_utc):
-    pub_ist = pub_utc.astimezone(IST)
-    return pub_ist.date() == selected_date
+    return pub_utc.astimezone(IST).date() == selected_date
+
+def matches_search(entry_text):
+    if not search_query:
+        return True
+    return search_query in entry_text
 
 # ------------------ SOURCES ------------------
 GLOBAL_FEEDS = [
@@ -143,7 +152,11 @@ def render_news(feeds, company=None):
                 continue
 
             text = f"{e.title} {getattr(e,'summary','')}".lower()
+
             if company and company.lower() not in text:
+                continue
+
+            if not matches_search(text):
                 continue
 
             if e.link in st.session_state.seen:
@@ -154,7 +167,7 @@ def render_news(feeds, company=None):
     items.sort(key=lambda x: x[0], reverse=True)
 
     if not items:
-        st.warning("No news found for this date.")
+        st.warning("No news found for this selection.")
 
     for pub, title, link in items[:50]:
         st.session_state.seen.add(link)
