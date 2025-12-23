@@ -1,7 +1,7 @@
 import streamlit as st
 import feedparser
 import time
-from datetime import datetime, timedelta, date
+from datetime import datetime, date
 from zoneinfo import ZoneInfo
 import socket, urllib.parse
 
@@ -22,22 +22,34 @@ if "live" not in st.session_state:
 if "seen" not in st.session_state:
     st.session_state.seen = set()
 
+if "search_only" not in st.session_state:
+    st.session_state.search_only = False
+
 # ------------------ CONTROLS ------------------
 col1, col2 = st.columns(2)
-
 if col1.button("🚀 Start Live"):
     st.session_state.live = True
+    st.session_state.search_only = False
 
 if col2.button("🛑 Stop"):
     st.session_state.live = False
 
 refresh = st.slider("Refresh interval (seconds)", 20, 120, 30)
 
-# ------------------ SEARCH ------------------
-search_query = st.text_input(
-    "🔍 Search news (company, topic, keyword)",
-    placeholder="e.g. Reliance, inflation, IPO"
-).strip().lower()
+# ------------------ SEARCH + BUTTON ------------------
+search_col1, search_col2 = st.columns([3, 1])
+
+with search_col1:
+    search_query = st.text_input(
+        "🔍 Search news (company, topic, keyword)",
+        placeholder="e.g. Reliance, IPO, inflation"
+    ).strip().lower()
+
+with search_col2:
+    if st.button("🔍 Search News"):
+        st.session_state.search_only = True
+        st.session_state.live = False
+        st.session_state.seen = set()
 
 # ------------------ CALENDAR ------------------
 selected_date = st.date_input(
@@ -67,17 +79,17 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# ------------------ LIVE BADGE ------------------
-is_today = selected_date == date.today()
-
-if st.session_state.live and is_today:
+# ------------------ MODE INDICATOR ------------------
+if st.session_state.search_only:
+    st.success("🔍 SEARCH MODE (Live disabled)")
+elif st.session_state.live and selected_date == date.today():
     st.markdown(
         "<div style='color:white;background:red;padding:6px 12px;"
         "border-radius:6px;font-weight:bold;margin-top:8px;'>🔴 LIVE</div>",
         unsafe_allow_html=True
     )
-elif st.session_state.live and not is_today:
-    st.warning("Live mode paused (viewing historical date)")
+elif st.session_state.live:
+    st.warning("Live paused (historical date)")
 else:
     st.info("Live mode OFF")
 
@@ -91,10 +103,10 @@ def safe_feed(url):
 def in_selected_date(pub_utc):
     return pub_utc.astimezone(IST).date() == selected_date
 
-def matches_search(entry_text):
+def matches_search(text):
     if not search_query:
         return True
-    return search_query in entry_text
+    return search_query in text
 
 # ------------------ SOURCES ------------------
 GLOBAL_FEEDS = [
@@ -119,13 +131,8 @@ BSE_BASE = [
 ]
 
 NSE_COMPANIES = [
-    "Reliance Industries",
-    "Tata Motors",
-    "HDFC Bank",
-    "ICICI Bank",
-    "Infosys",
-    "TCS",
-    "Adani Enterprises",
+    "Reliance Industries", "Tata Motors", "HDFC Bank",
+    "ICICI Bank", "Infosys", "TCS", "Adani Enterprises",
 ]
 
 # ------------------ TABS ------------------
@@ -167,10 +174,9 @@ def render_news(feeds, company=None):
     items.sort(key=lambda x: x[0], reverse=True)
 
     if not items:
-        st.warning("No news found for this selection.")
+        st.warning("No news found.")
 
     for pub, title, link in items[:50]:
-        st.session_state.seen.add(link)
         st.markdown(f"### {title}")
         st.write(f"🕒 {pub.strftime('%d %b %Y, %I:%M %p IST')}")
         st.markdown(f"[Open Article]({link})")
@@ -178,12 +184,10 @@ def render_news(feeds, company=None):
 
 # ------------------ GLOBAL TAB ------------------
 with tab_global:
-    st.subheader("🌍 Global News")
     render_news(GLOBAL_FEEDS)
 
 # ------------------ INDIA TAB ------------------
 with tab_india:
-    st.subheader("🇮🇳 India – General News")
     render_news(INDIA_GENERAL)
 
 # ------------------ MARKET TAB ------------------
@@ -206,8 +210,8 @@ with tab_market:
     with tab_bse:
         render_news(BSE_BASE)
 
-# ------------------ AUTO REFRESH ------------------
-if st.session_state.live and is_today:
+# ------------------ AUTO REFRESH (LIVE ONLY) ------------------
+if st.session_state.live and selected_date == date.today():
     st.caption(
         f"Last updated: {datetime.now(IST).strftime('%d %b %Y, %I:%M:%S %p IST')}"
     )
