@@ -36,6 +36,9 @@ if "search_query" not in st.session_state:
 if "manual_refresh" not in st.session_state:
     st.session_state.manual_refresh = False
 
+if "last_refreshed" not in st.session_state:
+    st.session_state.last_refreshed = datetime.now(IST)
+
 # ================== CONTROLS ==================
 col1, col2 = st.columns(2)
 
@@ -45,6 +48,7 @@ if col1.button("🚀 Start Live"):
     st.session_state.selected_date = date.today()
     st.session_state.date_applied = date.today()
     st.session_state.seen = set()
+    st.session_state.last_refreshed = datetime.now(IST)
 
 if col2.button("🛑 Stop"):
     st.session_state.live = False
@@ -66,6 +70,7 @@ with search_col2:
         st.session_state.search_only = bool(search_input.strip())
         st.session_state.live = False
         st.session_state.seen = set()
+        st.session_state.last_refreshed = datetime.now(IST)
 
 # ================== CALENDAR (APPLY) ==================
 with st.form("date_form"):
@@ -87,6 +92,7 @@ with st.form("date_form"):
         st.session_state.live = False
         st.session_state.search_only = False
         st.session_state.seen = set()
+        st.session_state.last_refreshed = datetime.now(IST)
 
 # ================== CLOCK + REFRESH ==================
 clock_col1, clock_col2 = st.columns([4, 1])
@@ -110,9 +116,22 @@ with clock_col1:
     )
 
 with clock_col2:
-    if st.button("🔄 Refresh"):
-        st.session_state.seen = set()
-        st.session_state.manual_refresh = True
+    st.button(
+        "🔄 Refresh",
+        disabled=st.session_state.live,  # ✅ 53
+        help="Stop Live mode to refresh manually" if st.session_state.live else None,
+        on_click=lambda: (
+            st.session_state.seen.clear(),
+            setattr(st.session_state, "manual_refresh", True),
+            setattr(st.session_state, "last_refreshed", datetime.now(IST))
+        )
+    )
+
+# ================== LAST REFRESHED (52) ==================
+st.caption(
+    f"🔁 Last refreshed at: "
+    f"{st.session_state.last_refreshed.strftime('%d %b %Y, %I:%M:%S %p IST')}"
+)
 
 # ================== APPLIED DATE BADGE ==================
 st.markdown(
@@ -157,7 +176,7 @@ def google_news_search(query, context=""):
     q = urllib.parse.quote_plus(f"{query} {context}".strip())
     return f"https://news.google.com/rss/search?q={q}"
 
-# ================== DEFAULT FEEDS ==================
+# ================== FEEDS ==================
 GLOBAL_FEEDS = [
     "https://news.google.com/rss/search?q=world+news",
     "https://news.google.com/rss/search?q=business",
@@ -214,7 +233,7 @@ def render_news(feeds):
         st.markdown(f"[Open Article]({link})")
         st.divider()
 
-# ================== TAB: GLOBAL ==================
+# ================== TAB CONTENT ==================
 with tab_global:
     feeds = (
         [google_news_search(st.session_state.search_query, "world")]
@@ -223,7 +242,6 @@ with tab_global:
     )
     render_news(feeds)
 
-# ================== TAB: INDIA ==================
 with tab_india:
     feeds = (
         [google_news_search(st.session_state.search_query, "India")]
@@ -232,7 +250,6 @@ with tab_india:
     )
     render_news(feeds)
 
-# ================== TAB: MARKET ==================
 with tab_market:
     tab_nse, tab_bse = st.tabs(["📊 NSE", "🏦 BSE"])
 
@@ -260,4 +277,5 @@ if st.session_state.manual_refresh:
 # ================== AUTO REFRESH ==================
 if st.session_state.live and is_today:
     time.sleep(refresh)
+    st.session_state.last_refreshed = datetime.now(IST)
     st.rerun()
