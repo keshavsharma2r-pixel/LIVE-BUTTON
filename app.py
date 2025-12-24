@@ -3,8 +3,14 @@ import feedparser
 import time
 from datetime import datetime, date
 from zoneinfo import ZoneInfo
-from streamlit_autorefresh import st_autorefresh
 import socket, urllib.parse
+
+# ================== OPTIONAL AUTOCLOCK ==================
+try:
+    from streamlit_autorefresh import st_autorefresh
+    AUTO_CLOCK = True
+except Exception:
+    AUTO_CLOCK = False
 
 # ================== TIMEZONE ==================
 IST = ZoneInfo("Asia/Kolkata")
@@ -16,22 +22,20 @@ st.set_page_config(layout="wide", page_title="News Intelligence Terminal")
 st.title("📰 News Intelligence Terminal")
 
 # ================== SESSION STATE ==================
-if "live" not in st.session_state:
-    st.session_state.live = False
-if "search_only" not in st.session_state:
-    st.session_state.search_only = False
-if "seen" not in st.session_state:
-    st.session_state.seen = set()
-if "selected_date" not in st.session_state:
-    st.session_state.selected_date = date.today()
-if "date_applied" not in st.session_state:
-    st.session_state.date_applied = date.today()
-if "search_query" not in st.session_state:
-    st.session_state.search_query = ""
-if "manual_refresh" not in st.session_state:
-    st.session_state.manual_refresh = False
-if "last_refreshed" not in st.session_state:
-    st.session_state.last_refreshed = datetime.now(IST)
+defaults = {
+    "live": False,
+    "search_only": False,
+    "seen": set(),
+    "selected_date": date.today(),
+    "date_applied": date.today(),
+    "search_query": "",
+    "manual_refresh": False,
+    "last_refreshed": datetime.now(IST),
+}
+
+for k, v in defaults.items():
+    if k not in st.session_state:
+        st.session_state[k] = v
 
 # ================== CONTROLS ==================
 c1, c2 = st.columns(2)
@@ -86,8 +90,9 @@ with st.form("date_form"):
         st.session_state.seen.clear()
         st.session_state.last_refreshed = datetime.now(IST)
 
-# ================== INDEPENDENT LIVE CLOCK ==================
-st_autorefresh(interval=1000, key="clock_only")
+# ================== INDEPENDENT CLOCK (SAFE) ==================
+if AUTO_CLOCK:
+    st_autorefresh(interval=1000, key="clock_only")
 
 # ================== CLOCK + REFRESH ==================
 t1, t2 = st.columns([4, 1])
@@ -127,7 +132,7 @@ st.caption(
 is_today = st.session_state.date_applied == date.today()
 
 if st.session_state.search_only:
-    st.success("🔍 SEARCH MODE")
+    st.success("🔍 SEARCH MODE (Google News)")
 elif st.session_state.live and is_today:
     st.markdown(
         "<div style='background:red;color:white;padding:6px 12px;"
@@ -143,7 +148,7 @@ else:
 def safe_feed(url):
     try:
         return feedparser.parse(url)
-    except:
+    except Exception:
         return None
 
 def in_selected_date(pub):
@@ -171,7 +176,7 @@ def render(feeds):
         for e in f.entries:
             try:
                 pub = datetime(*e.published_parsed[:6], tzinfo=UTC)
-            except:
+            except Exception:
                 continue
             if not in_selected_date(pub):
                 continue
