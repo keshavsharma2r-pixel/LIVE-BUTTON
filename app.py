@@ -30,8 +30,8 @@ if "selected_date" not in st.session_state:
 if "date_applied" not in st.session_state:
     st.session_state.date_applied = date.today()
 
-if "search_feeds" not in st.session_state:
-    st.session_state.search_feeds = []
+if "search_query" not in st.session_state:
+    st.session_state.search_query = ""
 
 # ================== CONTROLS ==================
 col1, col2 = st.columns(2)
@@ -52,36 +52,30 @@ refresh = st.slider("Refresh interval (seconds)", 20, 120, 30)
 search_col1, search_col2 = st.columns([3, 1])
 
 with search_col1:
-    search_query = st.text_input(
-        "🔍 Search news (Google-powered)",
+    search_input = st.text_input(
+        "🔍 Search news (Google News)",
         placeholder="Reliance results, RBI policy, US inflation..."
-    ).strip()
+    )
 
 with search_col2:
     if st.button("🔍 Search News"):
-        if search_query:
-            q = urllib.parse.quote_plus(search_query)
-            st.session_state.search_feeds = [
-                f"https://news.google.com/rss/search?q={q}",
-                f"https://news.google.com/rss/search?q={q}+India",
-                f"https://news.google.com/rss/search?q={q}+stock+market",
-            ]
-            st.session_state.search_only = True
-            st.session_state.live = False
-            st.session_state.seen = set()
+        st.session_state.search_query = search_input.strip()
+        st.session_state.search_only = bool(search_input.strip())
+        st.session_state.live = False
+        st.session_state.seen = set()
 
 # ================== CALENDAR (APPLY) ==================
 with st.form("date_form"):
-    date_col1, date_col2 = st.columns([3, 1])
+    dcol1, dcol2 = st.columns([3, 1])
 
-    with date_col1:
+    with dcol1:
         temp_date = st.date_input(
             "📅 Select date (IST)",
             value=st.session_state.selected_date,
             max_value=date.today()
         )
 
-    with date_col2:
+    with dcol2:
         apply_date = st.form_submit_button("📅 Apply Date")
 
     if apply_date:
@@ -145,12 +139,32 @@ def safe_feed(url):
 def in_selected_date(pub_utc):
     return pub_utc.astimezone(IST).date() == st.session_state.date_applied
 
+def google_news_search(query, context=""):
+    q = urllib.parse.quote_plus(f"{query} {context}".strip())
+    return f"https://news.google.com/rss/search?q={q}"
+
 # ================== DEFAULT FEEDS ==================
 GLOBAL_FEEDS = [
-    "https://news.google.com/rss/search?q=breaking+news",
     "https://news.google.com/rss/search?q=world+news",
     "https://news.google.com/rss/search?q=business",
 ]
+
+INDIA_FEEDS = [
+    "https://news.google.com/rss/search?q=India",
+]
+
+NSE_FEEDS = [
+    "https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms",
+]
+
+BSE_FEEDS = [
+    "https://www.livemint.com/rss/markets",
+]
+
+# ================== TABS ==================
+tab_global, tab_india, tab_market = st.tabs(
+    ["🌍 Global", "🇮🇳 India", "📈 Market"]
+)
 
 # ================== RENDER ==================
 def render_news(feeds):
@@ -180,17 +194,45 @@ def render_news(feeds):
     if not items:
         st.warning("No news found.")
 
-    for pub, title, link in items[:50]:
+    for pub, title, link in items[:40]:
         st.markdown(f"### {title}")
         st.write(f"🕒 {pub.strftime('%d %b %Y, %I:%M %p IST')}")
         st.markdown(f"[Open Article]({link})")
         st.divider()
 
-# ================== CONTENT ==================
-if st.session_state.search_only:
-    render_news(st.session_state.search_feeds)
-else:
-    render_news(GLOBAL_FEEDS)
+# ================== TAB: GLOBAL ==================
+with tab_global:
+    if st.session_state.search_only:
+        feeds = [google_news_search(st.session_state.search_query, "world")]
+    else:
+        feeds = GLOBAL_FEEDS
+    render_news(feeds)
+
+# ================== TAB: INDIA ==================
+with tab_india:
+    if st.session_state.search_only:
+        feeds = [google_news_search(st.session_state.search_query, "India")]
+    else:
+        feeds = INDIA_FEEDS
+    render_news(feeds)
+
+# ================== TAB: MARKET ==================
+with tab_market:
+    tab_nse, tab_bse = st.tabs(["📊 NSE", "🏦 BSE"])
+
+    with tab_nse:
+        if st.session_state.search_only:
+            feeds = [google_news_search(st.session_state.search_query, "NSE stock market")]
+        else:
+            feeds = NSE_FEEDS
+        render_news(feeds)
+
+    with tab_bse:
+        if st.session_state.search_only:
+            feeds = [google_news_search(st.session_state.search_query, "BSE stock market")]
+        else:
+            feeds = BSE_FEEDS
+        render_news(feeds)
 
 # ================== AUTO REFRESH ==================
 if st.session_state.live and is_today:
