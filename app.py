@@ -72,7 +72,7 @@ with search_col2:
         st.session_state.seen = set()
         st.session_state.last_refreshed = datetime.now(IST)
 
-# ================== CALENDAR (APPLY) ==================
+# ================== CALENDAR ==================
 with st.form("date_form"):
     dcol1, dcol2 = st.columns([3, 1])
 
@@ -118,7 +118,7 @@ with clock_col1:
 with clock_col2:
     st.button(
         "🔄 Refresh",
-        disabled=st.session_state.live,  # ✅ 53
+        disabled=st.session_state.live,
         help="Stop Live mode to refresh manually" if st.session_state.live else None,
         on_click=lambda: (
             st.session_state.seen.clear(),
@@ -127,23 +127,10 @@ with clock_col2:
         )
     )
 
-# ================== LAST REFRESHED (52) ==================
+# ================== LAST REFRESHED ==================
 st.caption(
     f"🔁 Last refreshed at: "
     f"{st.session_state.last_refreshed.strftime('%d %b %Y, %I:%M:%S %p IST')}"
-)
-
-# ================== APPLIED DATE BADGE ==================
-st.markdown(
-    f"""
-    <div style="margin-top:6px;display:inline-block;
-                background:#e0f2fe;color:#0369a1;
-                padding:6px 10px;border-radius:999px;
-                font-weight:600;font-size:14px;">
-        📌 Showing news for: {st.session_state.date_applied.strftime('%d %b %Y')}
-    </div>
-    """,
-    unsafe_allow_html=True
 )
 
 # ================== MODE ==================
@@ -269,12 +256,12 @@ with tab_market:
         )
         render_news(feeds)
 
-# ================== MANUAL REFRESH ==================
-if st.session_state.manual_refresh:
+# ================== MANUAL REFRESH (SAFE) ==================
+if st.session_state.manual_refresh and not st.session_state.live:
     st.session_state.manual_refresh = False
     st.rerun()
 
-# ================== AUTO REFRESH ==================
+# ================== AUTO REFRESH (LIVE) ==================
 if st.session_state.live and is_today:
     time.sleep(refresh)
     st.session_state.last_refreshed = datetime.now(IST)
