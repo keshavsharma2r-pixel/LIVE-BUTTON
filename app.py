@@ -30,6 +30,9 @@ if "selected_date" not in st.session_state:
 if "date_applied" not in st.session_state:
     st.session_state.date_applied = date.today()
 
+if "search_feeds" not in st.session_state:
+    st.session_state.search_feeds = []
+
 # ================== CONTROLS ==================
 col1, col2 = st.columns(2)
 
@@ -50,18 +53,25 @@ search_col1, search_col2 = st.columns([3, 1])
 
 with search_col1:
     search_query = st.text_input(
-        "🔍 Search news (company, topic, keyword)",
-        placeholder="Reliance, IPO, inflation..."
-    ).strip().lower()
+        "🔍 Search news (Google-powered)",
+        placeholder="Reliance results, RBI policy, US inflation..."
+    ).strip()
 
 with search_col2:
     if st.button("🔍 Search News"):
-        st.session_state.search_only = True
-        st.session_state.live = False
-        st.session_state.seen = set()
+        if search_query:
+            q = urllib.parse.quote_plus(search_query)
+            st.session_state.search_feeds = [
+                f"https://news.google.com/rss/search?q={q}",
+                f"https://news.google.com/rss/search?q={q}+India",
+                f"https://news.google.com/rss/search?q={q}+stock+market",
+            ]
+            st.session_state.search_only = True
+            st.session_state.live = False
+            st.session_state.seen = set()
 
-# ================== CALENDAR FORM (ENTER WORKS) ==================
-with st.form("date_form", clear_on_submit=False):
+# ================== CALENDAR (APPLY) ==================
+with st.form("date_form"):
     date_col1, date_col2 = st.columns([3, 1])
 
     with date_col1:
@@ -81,7 +91,7 @@ with st.form("date_form", clear_on_submit=False):
         st.session_state.search_only = False
         st.session_state.seen = set()
 
-# ================== LIVE DATE & TIME ==================
+# ================== CLOCK ==================
 now_ist = datetime.now(IST)
 st.markdown(
     f"""
@@ -96,28 +106,24 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# ================== APPLIED DATE BADGE (41) ==================
+# ================== DATE BADGE ==================
 st.markdown(
     f"""
-    <div style="margin-top:6px;
-                display:inline-block;
-                background:#e0f2fe;
-                color:#0369a1;
-                padding:6px 10px;
-                border-radius:999px;
-                font-weight:600;
-                font-size:14px;">
+    <div style="margin-top:6px;display:inline-block;
+                background:#e0f2fe;color:#0369a1;
+                padding:6px 10px;border-radius:999px;
+                font-weight:600;font-size:14px;">
         📌 Showing news for: {st.session_state.date_applied.strftime('%d %b %Y')}
     </div>
     """,
     unsafe_allow_html=True
 )
 
-# ================== MODE INDICATOR ==================
+# ================== MODE ==================
 is_today = st.session_state.date_applied == date.today()
 
 if st.session_state.search_only:
-    st.success("🔍 SEARCH MODE (Live disabled)")
+    st.success("🔍 SEARCH MODE (Google News)")
 elif st.session_state.live and is_today:
     st.markdown(
         "<div style='color:white;background:red;padding:6px 12px;"
@@ -139,45 +145,15 @@ def safe_feed(url):
 def in_selected_date(pub_utc):
     return pub_utc.astimezone(IST).date() == st.session_state.date_applied
 
-def matches_search(text):
-    if not search_query:
-        return True
-    return search_query in text
-
-# ================== SOURCES ==================
+# ================== DEFAULT FEEDS ==================
 GLOBAL_FEEDS = [
     "https://news.google.com/rss/search?q=breaking+news",
     "https://news.google.com/rss/search?q=world+news",
     "https://news.google.com/rss/search?q=business",
-    "https://news.google.com/rss/search?q=technology",
 ]
-
-INDIA_GENERAL = [
-    "https://news.google.com/rss/search?q=India",
-    "https://feeds.feedburner.com/ndtvnews-top-stories",
-]
-
-NSE_BASE = [
-    "https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms",
-    "https://www.moneycontrol.com/rss/marketreports.xml",
-]
-
-BSE_BASE = [
-    "https://www.livemint.com/rss/markets",
-]
-
-NSE_COMPANIES = [
-    "Reliance Industries", "Tata Motors", "HDFC Bank",
-    "ICICI Bank", "Infosys", "TCS", "Adani Enterprises"
-]
-
-# ================== TABS ==================
-tab_global, tab_india, tab_market = st.tabs(
-    ["🌍 Global", "🇮🇳 India General", "📈 India Market"]
-)
 
 # ================== RENDER ==================
-def render_news(feeds, company=None):
+def render_news(feeds):
     items = []
 
     for url in feeds:
@@ -192,14 +168,6 @@ def render_news(feeds, company=None):
                 continue
 
             if not in_selected_date(pub_utc):
-                continue
-
-            text = f"{e.title} {getattr(e,'summary','')}".lower()
-
-            if company and company.lower() not in text:
-                continue
-
-            if not matches_search(text):
                 continue
 
             if e.link in st.session_state.seen:
@@ -218,33 +186,13 @@ def render_news(feeds, company=None):
         st.markdown(f"[Open Article]({link})")
         st.divider()
 
-# ================== GLOBAL ==================
-with tab_global:
+# ================== CONTENT ==================
+if st.session_state.search_only:
+    render_news(st.session_state.search_feeds)
+else:
     render_news(GLOBAL_FEEDS)
-
-# ================== INDIA ==================
-with tab_india:
-    render_news(INDIA_GENERAL)
-
-# ================== MARKET ==================
-with tab_market:
-    tab_nse, tab_bse = st.tabs(["📊 NSE", "🏦 BSE"])
-
-    with tab_nse:
-        company = st.selectbox("Filter NSE by company", ["All"] + NSE_COMPANIES)
-        feeds = list(NSE_BASE)
-        if company != "All":
-            q = urllib.parse.quote_plus(f"{company} NSE stock")
-            feeds.append(f"https://news.google.com/rss/search?q={q}")
-        render_news(feeds, None if company == "All" else company)
-
-    with tab_bse:
-        render_news(BSE_BASE)
 
 # ================== AUTO REFRESH ==================
 if st.session_state.live and is_today:
-    st.caption(
-        f"Last updated: {datetime.now(IST).strftime('%d %b %Y, %I:%M:%S %p IST')}"
-    )
     time.sleep(refresh)
     st.rerun()
