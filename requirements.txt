@@ -2,3 +2,4 @@ streamlit
 feedparser
 textblob
 requests
+tzdata
