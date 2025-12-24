@@ -5,13 +5,6 @@ from datetime import datetime, date
 from zoneinfo import ZoneInfo
 import socket, urllib.parse
 
-# ================== OPTIONAL AUTOCLOCK ==================
-try:
-    from streamlit_autorefresh import st_autorefresh
-    AUTO_CLOCK = True
-except Exception:
-    AUTO_CLOCK = False
-
 # ================== TIMEZONE ==================
 IST = ZoneInfo("Asia/Kolkata")
 UTC = ZoneInfo("UTC")
@@ -90,38 +83,19 @@ with st.form("date_form"):
         st.session_state.seen.clear()
         st.session_state.last_refreshed = datetime.now(IST)
 
-# ================== INDEPENDENT CLOCK (SAFE) ==================
-if AUTO_CLOCK:
-    st_autorefresh(interval=1000, key="clock_only")
-
-# ================== CLOCK + REFRESH ==================
-t1, t2 = st.columns([4, 1])
-
-with t1:
-    now_ist = datetime.now(IST)
-    st.markdown(
-        f"""
-        <div style="padding:8px 12px;border-radius:8px;
-        background:#f1f5f9;font-size:16px;font-weight:600;">
-        📅 {now_ist.strftime('%d %b %Y')}
-        &nbsp; | &nbsp;
-        ⏰ {now_ist.strftime('%I:%M:%S %p')} IST
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-with t2:
-    st.button(
-        "🔄 Refresh",
-        disabled=st.session_state.live,
-        help="Stop Live to refresh manually",
-        on_click=lambda: (
-            st.session_state.seen.clear(),
-            setattr(st.session_state, "manual_refresh", True),
-            setattr(st.session_state, "last_refreshed", datetime.now(IST))
-        )
-    )
+# ================== CLOCK ==================
+now_ist = datetime.now(IST)
+st.markdown(
+    f"""
+    <div style="padding:8px 12px;border-radius:8px;
+    background:#f1f5f9;font-size:16px;font-weight:600;">
+    📅 {now_ist.strftime('%d %b %Y')}
+    &nbsp; | &nbsp;
+    ⏰ {now_ist.strftime('%I:%M:%S %p')} IST
+    </div>
+    """,
+    unsafe_allow_html=True
+)
 
 st.caption(
     f"🔁 Last refreshed at: "
@@ -132,7 +106,7 @@ st.caption(
 is_today = st.session_state.date_applied == date.today()
 
 if st.session_state.search_only:
-    st.success("🔍 SEARCH MODE (Google News)")
+    st.success("🔍 SEARCH MODE")
 elif st.session_state.live and is_today:
     st.markdown(
         "<div style='background:red;color:white;padding:6px 12px;"
@@ -148,7 +122,7 @@ else:
 def safe_feed(url):
     try:
         return feedparser.parse(url)
-    except Exception:
+    except:
         return None
 
 def in_selected_date(pub):
@@ -176,7 +150,7 @@ def render(feeds):
         for e in f.entries:
             try:
                 pub = datetime(*e.published_parsed[:6], tzinfo=UTC)
-            except Exception:
+            except:
                 continue
             if not in_selected_date(pub):
                 continue
@@ -204,8 +178,9 @@ with tm:
         render([gnews(st.session_state.search_query, "BSE")] if st.session_state.search_only else BSE)
 
 # ================== MANUAL REFRESH ==================
-if st.session_state.manual_refresh and not st.session_state.live:
-    st.session_state.manual_refresh = False
+if st.button("🔄 Refresh", disabled=st.session_state.live):
+    st.session_state.seen.clear()
+    st.session_state.last_refreshed = datetime.now(IST)
     st.rerun()
 
 # ================== LIVE AUTO REFRESH ==================
