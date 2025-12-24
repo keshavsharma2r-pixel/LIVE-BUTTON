@@ -33,6 +33,9 @@ if "date_applied" not in st.session_state:
 if "search_query" not in st.session_state:
     st.session_state.search_query = ""
 
+if "manual_refresh" not in st.session_state:
+    st.session_state.manual_refresh = False
+
 # ================== CONTROLS ==================
 col1, col2 = st.columns(2)
 
@@ -85,22 +88,33 @@ with st.form("date_form"):
         st.session_state.search_only = False
         st.session_state.seen = set()
 
-# ================== CLOCK ==================
-now_ist = datetime.now(IST)
-st.markdown(
-    f"""
-    <div style="margin-top:10px;padding:8px 12px;
-                border-radius:8px;background:#f1f5f9;
-                font-size:16px;font-weight:600;display:inline-block;">
-        📅 {now_ist.strftime('%d %b %Y')}
-        &nbsp; | &nbsp;
-        ⏰ {now_ist.strftime('%I:%M:%S %p')} IST
-    </div>
-    """,
-    unsafe_allow_html=True
-)
+# ================== CLOCK + REFRESH ==================
+clock_col1, clock_col2 = st.columns([4, 1])
 
-# ================== DATE BADGE ==================
+with clock_col1:
+    now_ist = datetime.now(IST)
+    st.markdown(
+        f"""
+        <div style="padding:8px 12px;
+                    border-radius:8px;
+                    background:#f1f5f9;
+                    font-size:16px;
+                    font-weight:600;
+                    display:inline-block;">
+            📅 {now_ist.strftime('%d %b %Y')}
+            &nbsp; | &nbsp;
+            ⏰ {now_ist.strftime('%I:%M:%S %p')} IST
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+with clock_col2:
+    if st.button("🔄 Refresh"):
+        st.session_state.seen = set()
+        st.session_state.manual_refresh = True
+
+# ================== APPLIED DATE BADGE ==================
 st.markdown(
     f"""
     <div style="margin-top:6px;display:inline-block;
@@ -202,18 +216,20 @@ def render_news(feeds):
 
 # ================== TAB: GLOBAL ==================
 with tab_global:
-    if st.session_state.search_only:
-        feeds = [google_news_search(st.session_state.search_query, "world")]
-    else:
-        feeds = GLOBAL_FEEDS
+    feeds = (
+        [google_news_search(st.session_state.search_query, "world")]
+        if st.session_state.search_only
+        else GLOBAL_FEEDS
+    )
     render_news(feeds)
 
 # ================== TAB: INDIA ==================
 with tab_india:
-    if st.session_state.search_only:
-        feeds = [google_news_search(st.session_state.search_query, "India")]
-    else:
-        feeds = INDIA_FEEDS
+    feeds = (
+        [google_news_search(st.session_state.search_query, "India")]
+        if st.session_state.search_only
+        else INDIA_FEEDS
+    )
     render_news(feeds)
 
 # ================== TAB: MARKET ==================
@@ -221,18 +237,25 @@ with tab_market:
     tab_nse, tab_bse = st.tabs(["📊 NSE", "🏦 BSE"])
 
     with tab_nse:
-        if st.session_state.search_only:
-            feeds = [google_news_search(st.session_state.search_query, "NSE stock market")]
-        else:
-            feeds = NSE_FEEDS
+        feeds = (
+            [google_news_search(st.session_state.search_query, "NSE stock market")]
+            if st.session_state.search_only
+            else NSE_FEEDS
+        )
         render_news(feeds)
 
     with tab_bse:
-        if st.session_state.search_only:
-            feeds = [google_news_search(st.session_state.search_query, "BSE stock market")]
-        else:
-            feeds = BSE_FEEDS
+        feeds = (
+            [google_news_search(st.session_state.search_query, "BSE stock market")]
+            if st.session_state.search_only
+            else BSE_FEEDS
+        )
         render_news(feeds)
+
+# ================== MANUAL REFRESH ==================
+if st.session_state.manual_refresh:
+    st.session_state.manual_refresh = False
+    st.rerun()
 
 # ================== AUTO REFRESH ==================
 if st.session_state.live and is_today:
