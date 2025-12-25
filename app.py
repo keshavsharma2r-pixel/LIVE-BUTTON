@@ -1,215 +1,183 @@
 import streamlit as st
 import feedparser
-import time
-from datetime import datetime, date
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import socket, urllib.parse
 
-# ================== OPTIONAL AUTOCLOCK ==================
-try:
-    from streamlit_autorefresh import st_autorefresh
-    AUTO_CLOCK = True
-except Exception:
-    AUTO_CLOCK = False
-
-# ================== TIMEZONE ==================
+# ------------------ TIMEZONE ------------------
 IST = ZoneInfo("Asia/Kolkata")
 UTC = ZoneInfo("UTC")
 socket.setdefaulttimeout(10)
 
-# ================== PAGE ==================
+# ------------------ CONFIG ------------------
 st.set_page_config(layout="wide", page_title="News Intelligence Terminal")
-st.title("📰 News Intelligence Terminal")
+st.title("📰 News Intelligence Terminal (IST – New Delhi)")
 
-# ================== SESSION STATE ==================
-defaults = {
-    "live": False,
-    "search_only": False,
-    "seen": set(),
-    "selected_date": date.today(),
-    "date_applied": date.today(),
-    "search_query": "",
-    "manual_refresh": False,
-    "last_refreshed": datetime.now(IST),
-}
+# ------------------ SESSION ------------------
+if "live" not in st.session_state:
+    st.session_state.live = False
+if "seen" not in st.session_state:
+    st.session_state.seen = set()
 
-for k, v in defaults.items():
-    if k not in st.session_state:
-        st.session_state[k] = v
-
-# ================== CONTROLS ==================
-c1, c2 = st.columns(2)
-
-if c1.button("🚀 Start Live"):
+# ------------------ CONTROLS ------------------
+col1, col2 = st.columns(2)
+if col1.button("🚀 Start Live"):
     st.session_state.live = True
-    st.session_state.search_only = False
-    st.session_state.selected_date = date.today()
-    st.session_state.date_applied = date.today()
     st.session_state.seen.clear()
-    st.session_state.last_refreshed = datetime.now(IST)
 
-if c2.button("🛑 Stop"):
+if col2.button("🛑 Stop"):
     st.session_state.live = False
 
-refresh = st.slider("Refresh interval (seconds)", 20, 120, 30)
-
-# ================== SEARCH ==================
-s1, s2 = st.columns([3, 1])
-
-with s1:
-    search_input = st.text_input(
-        "🔍 Search news (Google News)",
-        placeholder="Reliance results, RBI policy, US inflation..."
-    )
-
-with s2:
-    if st.button("🔍 Search News"):
-        st.session_state.search_query = search_input.strip()
-        st.session_state.search_only = bool(search_input.strip())
-        st.session_state.live = False
-        st.session_state.seen.clear()
-        st.session_state.last_refreshed = datetime.now(IST)
-
-# ================== CALENDAR ==================
-with st.form("date_form"):
-    d1, d2 = st.columns([3, 1])
-    with d1:
-        temp_date = st.date_input(
-            "📅 Select date (IST)",
-            value=st.session_state.selected_date,
-            max_value=date.today()
-        )
-    with d2:
-        apply_date = st.form_submit_button("📅 Apply Date")
-
-    if apply_date:
-        st.session_state.selected_date = temp_date
-        st.session_state.date_applied = temp_date
-        st.session_state.live = False
-        st.session_state.search_only = False
-        st.session_state.seen.clear()
-        st.session_state.last_refreshed = datetime.now(IST)
-
-# ================== INDEPENDENT CLOCK (SAFE) ==================
-if AUTO_CLOCK:
-    st_autorefresh(interval=1000, key="clock_only")
-
-# ================== CLOCK + REFRESH ==================
-t1, t2 = st.columns([4, 1])
-
-with t1:
-    now_ist = datetime.now(IST)
-    st.markdown(
-        f"""
-        <div style="padding:8px 12px;border-radius:8px;
-        background:#f1f5f9;font-size:16px;font-weight:600;">
-        📅 {now_ist.strftime('%d %b %Y')}
-        &nbsp; | &nbsp;
-        ⏰ {now_ist.strftime('%I:%M:%S %p')} IST
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-with t2:
-    st.button(
-        "🔄 Refresh",
-        disabled=st.session_state.live,
-        help="Stop Live to refresh manually",
-        on_click=lambda: (
-            st.session_state.seen.clear(),
-            setattr(st.session_state, "manual_refresh", True),
-            setattr(st.session_state, "last_refreshed", datetime.now(IST))
-        )
-    )
-
-st.caption(
-    f"🔁 Last refreshed at: "
-    f"{st.session_state.last_refreshed.strftime('%d %b %Y, %I:%M:%S %p IST')}"
+refresh = st.slider(
+    "Auto refresh interval (seconds)",
+    30, 300, 60,
+    help="Controls how often news is refreshed automatically"
 )
 
-# ================== MODE ==================
-is_today = st.session_state.date_applied == date.today()
+window = st.slider(
+    "Show news from last (minutes)",
+    60, 360, 180
+)
 
-if st.session_state.search_only:
-    st.success("🔍 SEARCH MODE (Google News)")
-elif st.session_state.live and is_today:
+# ------------------ LIVE BADGE ------------------
+if st.session_state.live:
     st.markdown(
-        "<div style='background:red;color:white;padding:6px 12px;"
-        "border-radius:6px;font-weight:bold;'>🔴 LIVE</div>",
+        "<div style='color:white;background:red;padding:6px 12px;"
+        "border-radius:6px;font-weight:bold;'>🔴 LIVE (Cache-based)</div>",
         unsafe_allow_html=True
     )
-elif st.session_state.live:
-    st.warning("Live paused (historical date)")
 else:
-    st.info("Manual browsing mode")
+    st.info("Live mode OFF")
 
-# ================== HELPERS ==================
-def safe_feed(url):
+# ------------------ CACHED FEED (KEY FIX) ------------------
+@st.cache_data(ttl=60)
+def cached_feed(url):
     try:
         return feedparser.parse(url)
-    except Exception:
+    except:
         return None
 
-def in_selected_date(pub):
-    return pub.astimezone(IST).date() == st.session_state.date_applied
+# ------------------ TIME FILTER ------------------
+def is_recent(dt_utc):
+    dt_ist = dt_utc.astimezone(IST)
+    return dt_ist >= datetime.now(IST) - timedelta(minutes=window)
 
-def gnews(q, ctx=""):
-    q = urllib.parse.quote_plus(f"{q} {ctx}".strip())
-    return f"https://news.google.com/rss/search?q={q}"
+# ------------------ SOURCES ------------------
+GLOBAL_FEEDS = [
+    "https://news.google.com/rss/search?q=breaking+news",
+    "https://news.google.com/rss/search?q=world+news",
+    "https://news.google.com/rss/search?q=business",
+    "https://news.google.com/rss/search?q=technology",
+]
 
-# ================== FEEDS ==================
-GLOBAL = ["https://news.google.com/rss/search?q=world+news"]
-INDIA = ["https://news.google.com/rss/search?q=India"]
-NSE = ["https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms"]
-BSE = ["https://www.livemint.com/rss/markets"]
+INDIA_GENERAL = [
+    "https://news.google.com/rss/search?q=India",
+    "https://feeds.feedburner.com/ndtvnews-top-stories",
+]
 
-# ================== TABS ==================
-tg, ti, tm = st.tabs(["🌍 Global", "🇮🇳 India", "📈 Market"])
+NSE_BASE = [
+    "https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms",
+    "https://www.moneycontrol.com/rss/marketreports.xml",
+]
 
-def render(feeds):
+BSE_BASE = [
+    "https://www.livemint.com/rss/markets",
+]
+
+NSE_COMPANIES = [
+    "Reliance Industries", "Tata Motors", "HDFC Bank",
+    "ICICI Bank", "Infosys", "TCS", "Adani Enterprises"
+]
+
+# ------------------ UI TABS ------------------
+tab_global, tab_india, tab_market = st.tabs(
+    ["🌍 Global", "🇮🇳 India General", "📈 India Market"]
+)
+
+# ------------------ DISPLAY FUNCTION ------------------
+def render_news(feeds, company=None):
     items = []
-    for u in feeds:
-        f = safe_feed(u)
-        if not f:
+
+    for url in feeds:
+        feed = cached_feed(url)
+        if not feed:
             continue
-        for e in f.entries:
+
+        for e in feed.entries:
             try:
-                pub = datetime(*e.published_parsed[:6], tzinfo=UTC)
-            except Exception:
+                pub_utc = datetime(*e.published_parsed[:6], tzinfo=UTC)
+            except:
                 continue
-            if not in_selected_date(pub):
+
+            text = f"{e.title} {getattr(e,'summary','')}".lower()
+            if company and company.lower() not in text:
                 continue
+
+            if not is_recent(pub_utc):
+                continue
+
             if e.link in st.session_state.seen:
                 continue
-            items.append((pub.astimezone(IST), e.title, e.link))
-    items.sort(reverse=True)
-    for p, t, l in items[:40]:
-        st.markdown(f"### {t}")
-        st.write(p.strftime("%d %b %Y, %I:%M %p IST"))
-        st.markdown(f"[Open]({l})")
+
+            pub_ist = pub_utc.astimezone(IST)
+            items.append((pub_ist, e.title, e.link))
+
+    items.sort(key=lambda x: x[0], reverse=True)
+
+    if not items:
+        st.warning("No fresh news right now.")
+
+    for pub_ist, title, link in items[:50]:
+        st.session_state.seen.add(link)
+        st.markdown(f"### {title}")
+        st.write(f"🕒 {pub_ist.strftime('%d %b %Y, %I:%M %p IST')}")
+        st.markdown(f"[Open]({link})")
         st.divider()
 
-with tg:
-    render([gnews(st.session_state.search_query, "world")] if st.session_state.search_only else GLOBAL)
+# ------------------ TAB: GLOBAL ------------------
+with tab_global:
+    st.subheader("🌍 Global Coverage")
+    if st.session_state.live:
+        render_news(GLOBAL_FEEDS)
+    else:
+        st.info("Start live to see global news")
 
-with ti:
-    render([gnews(st.session_state.search_query, "India")] if st.session_state.search_only else INDIA)
+# ------------------ TAB: INDIA ------------------
+with tab_india:
+    st.subheader("🇮🇳 India – General")
+    if st.session_state.live:
+        render_news(INDIA_GENERAL)
+    else:
+        st.info("Start live to see India news")
 
-with tm:
-    tn, tb = st.tabs(["📊 NSE", "🏦 BSE"])
-    with tn:
-        render([gnews(st.session_state.search_query, "NSE")] if st.session_state.search_only else NSE)
-    with tb:
-        render([gnews(st.session_state.search_query, "BSE")] if st.session_state.search_only else BSE)
+# ------------------ TAB: MARKET ------------------
+with tab_market:
+    tab_nse, tab_bse = st.tabs(["📊 NSE", "🏦 BSE"])
 
-# ================== MANUAL REFRESH ==================
-if st.session_state.manual_refresh and not st.session_state.live:
-    st.session_state.manual_refresh = False
-    st.rerun()
+    with tab_nse:
+        company = st.selectbox(
+            "Filter NSE by company (optional)",
+            ["All"] + NSE_COMPANIES
+        )
 
-# ================== LIVE AUTO REFRESH ==================
-if st.session_state.live and is_today:
-    time.sleep(refresh)
-    st.session_state.last_refreshed = datetime.now(IST)
-    st.rerun()
+        feeds = list(NSE_BASE)
+        if company != "All":
+            q = urllib.parse.quote_plus(f"{company} NSE stock")
+            feeds.append(f"https://news.google.com/rss/search?q={q}")
+
+        if st.session_state.live:
+            render_news(feeds, None if company == "All" else company)
+        else:
+            st.info("Start live to see NSE news")
+
+    with tab_bse:
+        if st.session_state.live:
+            render_news(BSE_BASE)
+        else:
+            st.info("Start live to see BSE news")
+
+# ------------------ STATUS ------------------
+st.caption(
+    f"Last checked: {datetime.now(IST).strftime('%d %b %Y, %I:%M:%S %p IST')} "
+    f"| Auto refresh via cache (~{refresh}s)"
+)
