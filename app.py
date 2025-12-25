@@ -21,6 +21,7 @@ if "seen" not in st.session_state:
 
 # ------------------ CONTROLS ------------------
 col1, col2 = st.columns(2)
+
 if col1.button("🚀 Start Live"):
     st.session_state.live = True
     st.session_state.seen.clear()
@@ -31,7 +32,7 @@ if col2.button("🛑 Stop"):
 refresh = st.slider(
     "Auto refresh interval (seconds)",
     30, 300, 60,
-    help="Controls how often news is refreshed automatically"
+    help="Controls how often news is refreshed automatically (cache TTL)"
 )
 
 window = st.slider(
@@ -49,7 +50,7 @@ if st.session_state.live:
 else:
     st.info("Live mode OFF")
 
-# ------------------ CACHED FEED (KEY FIX) ------------------
+# ------------------ CACHED FEED ------------------
 @st.cache_data(ttl=60)
 def cached_feed(url):
     try:
@@ -176,8 +177,27 @@ with tab_market:
         else:
             st.info("Start live to see BSE news")
 
-# ------------------ STATUS ------------------
-st.caption(
-    f"Last checked: {datetime.now(IST).strftime('%d %b %Y, %I:%M:%S %p IST')} "
-    f"| Auto refresh via cache (~{refresh}s)"
+# ------------------ REAL DATE & TIME PANEL ------------------
+now_ist = datetime.now(IST)
+
+st.markdown(
+    f"""
+    <div style="
+        background:#f1f5f9;
+        padding:12px 16px;
+        border-radius:10px;
+        font-size:14px;
+        font-weight:600;
+        margin-top:12px;
+    ">
+        📅 <b>Date:</b> {now_ist.strftime('%d %b %Y')}
+        &nbsp;&nbsp;|&nbsp;&nbsp;
+        ⏰ <b>Time:</b> {now_ist.strftime('%I:%M:%S %p')} IST
+        <br>
+        🔁 <b>News refresh mode:</b> Cache-based (~{refresh} seconds)
+        <br>
+        🔴 <b>Live status:</b> {"ON" if st.session_state.live else "OFF"}
+    </div>
+    """,
+    unsafe_allow_html=True
 )
