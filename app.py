@@ -44,7 +44,7 @@ if st.session_state.live:
 else:
     st.info("Live mode OFF")
 
-# ------------------ FEED FETCH (NO CACHE) ------------------
+# ------------------ FEED FETCH ------------------
 def fetch_feed(url):
     try:
         return feedparser.parse(url)
@@ -57,35 +57,62 @@ def is_recent(dt_utc):
     return dt_ist >= datetime.now(IST) - timedelta(minutes=window)
 
 def get_source(entry):
-    # Prefer RSS source title
     if hasattr(entry, "source") and hasattr(entry.source, "title"):
         return entry.source.title
-
-    # Fallback: extract domain
     try:
         domain = urllib.parse.urlparse(entry.link).netloc
-        domain = domain.replace("www.", "")
-        return domain.upper()
+        return domain.replace("www.", "").upper()
     except:
         return "UNKNOWN"
 
 # ------------------ SOURCES ------------------
-GLOBAL_FEEDS = [
+
+# 🌍 GOOGLE NEWS – GLOBAL AGGREGATOR
+GOOGLE_GLOBAL = [
     "https://news.google.com/rss/search?q=breaking+news",
     "https://news.google.com/rss/search?q=world+news",
-    "https://news.google.com/rss/search?q=business",
-    "https://news.google.com/rss/search?q=technology",
+    "https://news.google.com/rss/search?q=global+markets",
+    "https://news.google.com/rss/search?q=business+news",
+    "https://news.google.com/rss/search?q=technology+news",
+    "https://news.google.com/rss/search?q=geopolitics",
+    "https://news.google.com/rss/search?q=war+conflict",
+    "https://news.google.com/rss/search?q=inflation+interest+rates",
+    "https://news.google.com/rss/search?q=central+bank+policy",
 ]
 
+# 🏛️ TIER-1 GLOBAL PUBLISHERS
+GLOBAL_TIER1 = [
+    "https://www.reuters.com/rssFeed/worldNews",
+    "https://www.reuters.com/rssFeed/businessNews",
+    "https://feeds.bbci.co.uk/news/world/rss.xml",
+    "https://feeds.bbci.co.uk/news/business/rss.xml",
+    "https://feeds.a.dj.com/rss/RSSWorldNews.xml",
+]
+
+# 🌎 REGIONAL / CONTINENTAL
+REGIONAL_GLOBAL = [
+    "https://news.google.com/rss/search?q=asia+markets",
+    "https://news.google.com/rss/search?q=europe+markets",
+    "https://news.google.com/rss/search?q=middle+east+news",
+    "https://news.google.com/rss/search?q=africa+economy",
+    "https://news.google.com/rss/search?q=latin+america+markets",
+]
+
+# 🇮🇳 INDIA – GENERAL
 INDIA_GENERAL = [
-    "https://news.google.com/rss/search?q=India",
+    "https://news.google.com/rss/search?q=India+breaking+news",
+    "https://news.google.com/rss/search?q=India+economy",
+    "https://news.google.com/rss/search?q=India+markets",
+    "https://news.google.com/rss/search?q=RBI+policy",
     "https://feeds.feedburner.com/ndtvnews-top-stories",
 ]
 
+# 📈 INDIA MARKETS
 NSE_BASE = [
     "https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms",
     "https://www.moneycontrol.com/rss/marketreports.xml",
     "https://www.business-standard.com/rss/markets-106.rss",
+    "https://www.livemint.com/rss/markets",
 ]
 
 BSE_BASE = [
@@ -97,12 +124,14 @@ NSE_COMPANIES = [
     "ICICI Bank", "Infosys", "TCS", "Adani Enterprises"
 ]
 
+GLOBAL_FEEDS = GOOGLE_GLOBAL + GLOBAL_TIER1 + REGIONAL_GLOBAL
+
 # ------------------ UI TABS ------------------
 tab_global, tab_india, tab_market = st.tabs(
     ["🌍 Global", "🇮🇳 India General", "📈 India Market"]
 )
 
-# ------------------ DISPLAY FUNCTION ------------------
+# ------------------ RENDER NEWS ------------------
 def render_news(feeds, company=None):
     items = []
 
@@ -127,10 +156,12 @@ def render_news(feeds, company=None):
             if e.link in st.session_state.seen:
                 continue
 
-            pub_ist = pub_utc.astimezone(IST)
-            source = get_source(e)
-
-            items.append((pub_ist, e.title, e.link, source))
+            items.append((
+                pub_utc.astimezone(IST),
+                e.title,
+                e.link,
+                get_source(e)
+            ))
 
     items.sort(key=lambda x: x[0], reverse=True)
 
@@ -142,54 +173,38 @@ def render_news(feeds, company=None):
 
         st.markdown(f"### {title}")
         st.write(f"🕒 {pub_ist.strftime('%d %b %Y, %I:%M %p IST')}")
-
         st.markdown(
-            f"""
-            <span style="
-                background:#e5e7eb;
-                padding:4px 8px;
-                border-radius:6px;
-                font-size:12px;
-                font-weight:600;
-            ">
-                📰 {source}
-            </span>
-            """,
+            f"<span style='background:#e5e7eb;padding:4px 8px;"
+            f"border-radius:6px;font-size:12px;font-weight:600;'>"
+            f"📰 {source}</span>",
             unsafe_allow_html=True
         )
-
         st.markdown(f"[Open Article]({link})")
         st.divider()
 
-# ------------------ TAB: GLOBAL ------------------
+# ------------------ GLOBAL ------------------
 with tab_global:
-    st.subheader("🌍 Global Coverage")
     if st.session_state.live:
         render_news(GLOBAL_FEEDS)
     else:
         st.info("Start live to see global news")
 
-# ------------------ TAB: INDIA ------------------
+# ------------------ INDIA ------------------
 with tab_india:
-    st.subheader("🇮🇳 India – General")
     if st.session_state.live:
         render_news(INDIA_GENERAL)
     else:
         st.info("Start live to see India news")
 
-# ------------------ TAB: MARKET ------------------
+# ------------------ MARKET ------------------
 with tab_market:
     tab_nse, tab_bse = st.tabs(["📊 NSE", "🏦 BSE"])
 
     with tab_nse:
-        company = st.selectbox(
-            "Filter NSE by company (optional)",
-            ["All"] + NSE_COMPANIES
-        )
-
+        company = st.selectbox("Filter NSE company", ["All"] + NSE_COMPANIES)
         feeds = list(NSE_BASE)
         if company != "All":
-            q = urllib.parse.quote_plus(f"{company} NSE stock")
+            q = urllib.parse.quote_plus(company + " stock")
             feeds.append(f"https://news.google.com/rss/search?q={q}")
 
         if st.session_state.live:
@@ -202,24 +217,3 @@ with tab_market:
             render_news(BSE_BASE)
         else:
             st.info("Start live to see BSE news")
-
-# ------------------ STATUS PANEL ------------------
-now_ist = datetime.now(IST)
-
-st.markdown(
-    f"""
-    <div style="
-        background:#f1f5f9;
-        padding:12px 16px;
-        border-radius:10px;
-        font-size:14px;
-        font-weight:600;
-        margin-top:12px;
-    ">
-        📅 <b>Date:</b> {now_ist.strftime('%d %b %Y')}
-        &nbsp;&nbsp;|&nbsp;&nbsp;
-        🔴 <b>Live:</b> {"ON" if st.session_state.live else "OFF"}
-    </div>
-    """,
-    unsafe_allow_html=True
-)
