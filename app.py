@@ -21,10 +21,18 @@ if "seen" not in st.session_state:
 if "last_fetch" not in st.session_state:
     st.session_state.last_fetch = None
 
-# ------------------ TOP RIGHT CONTROLS ------------------
-top_left, top_right = st.columns([6, 2])
+# FILTER STATE
+if "apply_filters" not in st.session_state:
+    st.session_state.apply_filters = False
+if "search_query" not in st.session_state:
+    st.session_state.search_query = ""
+if "filter_date" not in st.session_state:
+    st.session_state.filter_date = None
 
-with top_right:
+# ------------------ TOP RIGHT CONTROLS ------------------
+left, right = st.columns([6, 2])
+
+with right:
     if st.button("🔴 LIVE"):
         st.session_state.live = True
         st.session_state.seen.clear()
@@ -33,25 +41,37 @@ with top_right:
     if st.button("⏹ STOP"):
         st.session_state.live = False
 
-# ------------------ SEARCH + DATE ------------------
+# ------------------ FILTER CONTROLS ------------------
 st.divider()
 
-search_col, date_col, mode_col = st.columns([5, 2, 2])
+f1, f2, f3, f4 = st.columns([5, 2, 1.5, 1.5])
 
-with search_col:
-    search_query = st.text_input(
-        "🔍 Global Search (company, topic, keyword)",
-        placeholder="Reliance, FED, AI, war, inflation..."
+with f1:
+    search_input = st.text_input(
+        "🔍 Search",
+        placeholder="Company, keyword, topic…",
+        value=st.session_state.search_query
     )
 
-with date_col:
-    selected_date = st.date_input(
-        "📅 Jump to date",
-        value=date.today()
+with f2:
+    date_input = st.date_input(
+        "📅 Date",
+        value=st.session_state.filter_date or date.today()
     )
 
-with mode_col:
-    search_only = st.checkbox("Search only (ignore live)")
+with f3:
+    if st.button("🔍 Search"):
+        st.session_state.search_query = search_input.strip()
+        st.session_state.filter_date = date_input
+        st.session_state.apply_filters = True
+        st.session_state.seen.clear()
+
+with f4:
+    if st.button("🔄 Reset"):
+        st.session_state.apply_filters = False
+        st.session_state.search_query = ""
+        st.session_state.filter_date = None
+        st.session_state.seen.clear()
 
 # ------------------ STATUS ------------------
 if st.session_state.live:
@@ -70,26 +90,22 @@ def fetch_feed(url):
     except:
         return None
 
-# ------------------ SOURCE NAME ------------------
 def get_source(entry):
     try:
         return urllib.parse.urlparse(entry.link).netloc.replace("www.", "").upper()
     except:
         return "UNKNOWN"
 
-# ------------------ SOURCES (NO PRIORITY) ------------------
-GOOGLE_FEEDS = [
+# ------------------ SOURCES ------------------
+GLOBAL_FEEDS = [
     "https://news.google.com/rss",
-    "https://news.google.com/rss/search?q=business",
-    "https://news.google.com/rss/search?q=markets",
-    "https://news.google.com/rss/search?q=world",
-    "https://news.google.com/rss/search?q=India",
+    "https://www.reuters.com/rssFeed/worldNews",
+    "https://feeds.bbci.co.uk/news/world/rss.xml",
 ]
 
-GLOBAL_FEEDS = [
-    "https://www.reuters.com/rssFeed/worldNews",
-    "https://www.reuters.com/rssFeed/businessNews",
-    "https://feeds.bbci.co.uk/news/world/rss.xml",
+INDIA_FEEDS = [
+    "https://news.google.com/rss/search?q=India",
+    "https://feeds.feedburner.com/ndtvnews-top-stories",
 ]
 
 MARKET_FEEDS = [
@@ -103,12 +119,12 @@ tab_global, tab_india, tab_market = st.tabs(
     ["🌍 Global", "🇮🇳 India", "📈 Markets"]
 )
 
-# ------------------ RENDER FUNCTION ------------------
+# ------------------ RENDER NEWS ------------------
 def render_news(feeds):
     FETCH_INTERVAL = 60
     now = datetime.now(IST)
 
-    if st.session_state.live and not search_only:
+    if st.session_state.live:
         if st.session_state.last_fetch:
             if (now - st.session_state.last_fetch).total_seconds() < FETCH_INTERVAL:
                 return
@@ -124,37 +140,37 @@ def render_news(feeds):
         for e in feed.entries:
             try:
                 pub_utc = datetime(*e.published_parsed[:6], tzinfo=UTC)
+                pub_ist = pub_utc.astimezone(IST)
             except:
                 continue
 
-            pub_ist = pub_utc.astimezone(IST)
+            # APPLY FILTERS ONLY IF USER CLICKED SEARCH
+            if st.session_state.apply_filters:
+                if st.session_state.filter_date:
+                    if pub_ist.date() != st.session_state.filter_date:
+                        continue
 
-            # Date filter (calendar jump)
-            if pub_ist.date() != selected_date:
-                continue
-
-            # Search filter
-            if search_query:
-                text = f"{e.title} {getattr(e,'summary','')}".lower()
-                if search_query.lower() not in text:
-                    continue
+                if st.session_state.search_query:
+                    text = f"{e.title} {getattr(e,'summary','')}".lower()
+                    if st.session_state.search_query.lower() not in text:
+                        continue
 
             if e.link in st.session_state.seen:
                 continue
 
             st.session_state.seen.add(e.link)
 
-            collected.append((
-                pub_ist,
-                e.title,
-                e.link,
-                get_source(e)
-            ))
+            collected.append(
+                (pub_ist, e.title, e.link, get_source(e))
+            )
 
     collected.sort(key=lambda x: x[0], reverse=True)
 
     if not collected:
-        st.warning("No news found for selected filters.")
+        if st.session_state.apply_filters:
+            st.warning("No news found for selected filters.")
+        else:
+            st.info("No new updates right now.")
         return
 
     for pub, title, link, source in collected:
@@ -170,10 +186,10 @@ def render_news(feeds):
 
 # ------------------ TAB CONTENT ------------------
 with tab_global:
-    render_news(GOOGLE_FEEDS + GLOBAL_FEEDS)
+    render_news(GLOBAL_FEEDS)
 
 with tab_india:
-    render_news(GOOGLE_FEEDS)
+    render_news(INDIA_FEEDS)
 
 with tab_market:
     render_news(MARKET_FEEDS)
