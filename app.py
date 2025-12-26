@@ -18,36 +18,39 @@ if "live" not in st.session_state:
     st.session_state.live = False
 if "seen" not in st.session_state:
     st.session_state.seen = set()
+if "last_fetch" not in st.session_state:
+    st.session_state.last_fetch = None
 if "last_update" not in st.session_state:
     st.session_state.last_update = None
+if "new_count" not in st.session_state:
+    st.session_state.new_count = 0
 
 # ------------------ CONTROLS ------------------
-col1, col2 = st.columns(2)
+c1, c2 = st.columns(2)
 
-if col1.button("🚀 Start Live"):
+if c1.button("🚀 Start Live"):
     st.session_state.live = True
     st.session_state.seen.clear()
+    st.session_state.last_fetch = None
     st.session_state.last_update = datetime.now(IST)
 
-if col2.button("🛑 Stop"):
+if c2.button("🛑 Stop"):
     st.session_state.live = False
 
-window = st.slider(
-    "Show news from last (minutes)",
-    60, 360, 180
-)
+window = st.slider("Show news from last (minutes)", 60, 360, 180)
 
-# ------------------ LIVE BADGE ------------------
+# ------------------ STATUS ------------------
 if st.session_state.live:
     st.markdown(
         "<div style='color:white;background:red;padding:6px 12px;"
         "border-radius:6px;font-weight:bold;'>🔴 LIVE</div>",
         unsafe_allow_html=True
     )
+    st.caption("Checking for updates…")
 else:
     st.info("Live mode OFF")
 
-# ------------------ FEED FETCH ------------------
+# ------------------ SAFE FEED ------------------
 def fetch_feed(url):
     try:
         return feedparser.parse(url)
@@ -62,26 +65,37 @@ def get_source(entry):
     if hasattr(entry, "source") and hasattr(entry.source, "title"):
         return entry.source.title
     try:
-        domain = urllib.parse.urlparse(entry.link).netloc
-        return domain.replace("www.", "").upper()
+        return urllib.parse.urlparse(entry.link).netloc.replace("www.", "").upper()
     except:
         return "UNKNOWN"
 
-# ------------------ SOURCES ------------------
+# ------------------ EXPANDED SOURCES ------------------
 
-GOOGLE_GLOBAL = [
-    "https://news.google.com/rss/search?q=breaking+news",
-    "https://news.google.com/rss/search?q=world+news",
-    "https://news.google.com/rss/search?q=global+markets",
-    "https://news.google.com/rss/search?q=business+news",
-    "https://news.google.com/rss/search?q=technology+news",
-    "https://news.google.com/rss/search?q=geopolitics",
-    "https://news.google.com/rss/search?q=war+conflict",
-    "https://news.google.com/rss/search?q=inflation+interest+rates",
-    "https://news.google.com/rss/search?q=central+bank+policy",
+# Google News (massive aggregation)
+GOOGLE_QUERIES = [
+    "breaking news",
+    "world news",
+    "global markets",
+    "stock market",
+    "business news",
+    "technology news",
+    "earnings results",
+    "merger acquisition",
+    "IPO market",
+    "central bank policy",
+    "inflation interest rates",
+    "geopolitics conflict",
+    "oil prices",
+    "currency markets",
 ]
 
-GLOBAL_TIER1 = [
+GOOGLE_FEEDS = [
+    f"https://news.google.com/rss/search?q={urllib.parse.quote_plus(q)}"
+    for q in GOOGLE_QUERIES
+]
+
+# Tier-1 global financial media
+TIER1_GLOBAL = [
     "https://www.reuters.com/rssFeed/worldNews",
     "https://www.reuters.com/rssFeed/businessNews",
     "https://feeds.bbci.co.uk/news/world/rss.xml",
@@ -89,44 +103,41 @@ GLOBAL_TIER1 = [
     "https://feeds.a.dj.com/rss/RSSWorldNews.xml",
 ]
 
-REGIONAL_GLOBAL = [
-    "https://news.google.com/rss/search?q=asia+markets",
-    "https://news.google.com/rss/search?q=europe+markets",
-    "https://news.google.com/rss/search?q=middle+east+news",
-    "https://news.google.com/rss/search?q=africa+economy",
-    "https://news.google.com/rss/search?q=latin+america+markets",
-]
-
-INDIA_GENERAL = [
+# India general & economy
+INDIA_FEEDS = [
     "https://news.google.com/rss/search?q=India+breaking+news",
     "https://news.google.com/rss/search?q=India+economy",
-    "https://news.google.com/rss/search?q=India+markets",
-    "https://news.google.com/rss/search?q=RBI+policy",
+    "https://news.google.com/rss/search?q=India+stock+market",
     "https://feeds.feedburner.com/ndtvnews-top-stories",
 ]
 
+# Markets (global + India, unified)
 MARKET_FEEDS = [
     "https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms",
     "https://www.moneycontrol.com/rss/marketreports.xml",
-    "https://www.business-standard.com/rss/markets-106.rss",
     "https://www.livemint.com/rss/markets",
-    "https://news.google.com/rss/search?q=stock+market+news",
-    "https://news.google.com/rss/search?q=global+markets",
-    "https://news.google.com/rss/search?q=earnings+results",
-    "https://news.google.com/rss/search?q=mergers+acquisitions",
-    "https://www.reuters.com/rssFeed/businessNews",
+    "https://www.business-standard.com/rss/markets-106.rss",
 ]
 
-GLOBAL_FEEDS = GOOGLE_GLOBAL + GLOBAL_TIER1 + REGIONAL_GLOBAL
+GLOBAL_FEEDS = GOOGLE_FEEDS + TIER1_GLOBAL
 
-# ------------------ UI TABS ------------------
+# ------------------ TABS ------------------
 tab_global, tab_india, tab_market = st.tabs(
-    ["🌍 Global", "🇮🇳 India General", "📈 Market"]
+    ["🌍 Global", "🇮🇳 India", "📈 Markets"]
 )
 
-# ------------------ RENDER NEWS ------------------
+# ------------------ HYBRID RENDER ------------------
 def render_news(feeds):
-    items = []
+    FETCH_INTERVAL = 60  # seconds (HYBRID SAFE LIMIT)
+    now = datetime.now(IST)
+
+    if st.session_state.last_fetch:
+        if (now - st.session_state.last_fetch).total_seconds() < FETCH_INTERVAL:
+            return
+
+    st.session_state.last_fetch = now
+    new_items = 0
+    collected = []
 
     for url in feeds:
         feed = fetch_feed(url)
@@ -145,25 +156,29 @@ def render_news(feeds):
             if e.link in st.session_state.seen:
                 continue
 
-            items.append((
+            st.session_state.seen.add(e.link)
+            new_items += 1
+
+            collected.append((
                 pub_utc.astimezone(IST),
                 e.title,
                 e.link,
                 get_source(e)
             ))
 
-    items.sort(key=lambda x: x[0], reverse=True)
+    if new_items > 0:
+        st.session_state.last_update = now
+        st.session_state.new_count = new_items
 
-    if items:
-        st.session_state.last_update = datetime.now(IST)
-    else:
-        st.warning("No fresh news right now.")
+    collected.sort(key=lambda x: x[0], reverse=True)
 
-    for pub_ist, title, link, source in items[:50]:
-        st.session_state.seen.add(link)
+    if not collected:
+        st.warning("No new headlines in this interval.")
+        return
 
-        st.markdown(f"### {title}")
-        st.write(f"🕒 {pub_ist.strftime('%d %b %Y, %I:%M %p IST')}")
+    for pub, title, link, source in collected[:40]:
+        st.markdown(f"### 🆕 {title}")
+        st.write(f"🕒 {pub.strftime('%d %b %Y, %I:%M %p IST')}")
         st.markdown(
             f"<span style='background:#e5e7eb;padding:4px 8px;"
             f"border-radius:6px;font-size:12px;font-weight:600;'>"
@@ -173,42 +188,28 @@ def render_news(feeds):
         st.markdown(f"[Open Article]({link})")
         st.divider()
 
-# ------------------ GLOBAL ------------------
+# ------------------ TAB CONTENT ------------------
 with tab_global:
     if st.session_state.live:
         render_news(GLOBAL_FEEDS)
     else:
         st.info("Start live to see global news")
 
-# ------------------ INDIA ------------------
 with tab_india:
     if st.session_state.live:
-        render_news(INDIA_GENERAL)
+        render_news(INDIA_FEEDS)
     else:
         st.info("Start live to see India news")
 
-# ------------------ MARKET ------------------
 with tab_market:
     if st.session_state.live:
         render_news(MARKET_FEEDS)
     else:
         st.info("Start live to see market news")
 
-# ------------------ LAST UPDATE DISPLAY ------------------
+# ------------------ FOOTER ------------------
 if st.session_state.last_update:
-    st.markdown(
-        f"""
-        <div style="
-            background:#f8fafc;
-            padding:10px 14px;
-            border-radius:8px;
-            font-size:14px;
-            font-weight:600;
-            margin-top:14px;
-        ">
-            ⏱ <b>Last Update:</b>
-            {st.session_state.last_update.strftime('%d %b %Y, %I:%M %p IST')}
-        </div>
-        """,
-        unsafe_allow_html=True
+    st.success(
+        f"🆕 {st.session_state.new_count} new headlines | "
+        f"Last Update: {st.session_state.last_update.strftime('%d %b %Y, %I:%M %p IST')}"
     )
