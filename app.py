@@ -21,7 +21,7 @@ if "seen" not in st.session_state:
 if "last_fetch" not in st.session_state:
     st.session_state.last_fetch = None
 
-# Filter state
+# Filter control
 if "apply_filters" not in st.session_state:
     st.session_state.apply_filters = False
 if "search_query" not in st.session_state:
@@ -58,7 +58,7 @@ with f1:
 with f2:
     date_input = st.date_input(
         "📅 Jump to date",
-        value=st.session_state.filter_date or date.today()
+        value=st.session_state.filter_date
     )
 
 with f3:
@@ -68,15 +68,10 @@ with f3:
         st.session_state.apply_filters = True
         st.session_state.seen.clear()
 
-        if st.session_state.search_query:
-            st.session_state.status_msg = (
-                f'Showing results for "{st.session_state.search_query}" '
-                f'on {st.session_state.filter_date.strftime("%d %b %Y")}'
-            )
+        if st.session_state.search_query or st.session_state.filter_date:
+            st.session_state.status_msg = "Showing filtered news"
         else:
-            st.session_state.status_msg = (
-                f'Showing news for {st.session_state.filter_date.strftime("%d %b %Y")}'
-            )
+            st.session_state.status_msg = "Showing all news"
 
 with f4:
     if st.button("🔄 Reset"):
@@ -86,7 +81,7 @@ with f4:
         st.session_state.seen.clear()
         st.session_state.status_msg = "Filters cleared — showing all news"
 
-# ------------------ STATUS BANNERS ------------------
+# ------------------ STATUS ------------------
 st.caption(st.session_state.status_msg)
 
 if st.session_state.live:
@@ -159,7 +154,7 @@ def render_news(feeds):
             except:
                 continue
 
-            # Apply filters ONLY if Search clicked
+            # 🔴 APPLY FILTERS ONLY AFTER SEARCH CLICK
             if st.session_state.apply_filters:
                 if st.session_state.filter_date:
                     if pub_ist.date() != st.session_state.filter_date:
@@ -176,13 +171,14 @@ def render_news(feeds):
             st.session_state.seen.add(e.link)
             items.append((pub_ist, e.title, e.link, get_source(e)))
 
+    # ✅ ALWAYS SORT LATEST → OLD
     items.sort(key=lambda x: x[0], reverse=True)
 
     if not items:
         if st.session_state.apply_filters:
             st.warning(
-                "No matching news for this date/search. "
-                "Try another keyword or click Reset."
+                "No news found for selected date/search. "
+                "Try another date or reset filters."
             )
         else:
             st.info("No new updates right now.")
