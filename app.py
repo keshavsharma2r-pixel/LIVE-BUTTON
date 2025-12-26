@@ -21,13 +21,15 @@ if "seen" not in st.session_state:
 if "last_fetch" not in st.session_state:
     st.session_state.last_fetch = None
 
-# FILTER STATE
+# Filter state
 if "apply_filters" not in st.session_state:
     st.session_state.apply_filters = False
 if "search_query" not in st.session_state:
     st.session_state.search_query = ""
 if "filter_date" not in st.session_state:
     st.session_state.filter_date = None
+if "status_msg" not in st.session_state:
+    st.session_state.status_msg = "Showing all news"
 
 # ------------------ TOP RIGHT CONTROLS ------------------
 left, right = st.columns([6, 2])
@@ -48,14 +50,14 @@ f1, f2, f3, f4 = st.columns([5, 2, 1.5, 1.5])
 
 with f1:
     search_input = st.text_input(
-        "🔍 Search",
-        placeholder="Company, keyword, topic…",
+        "🔍 Global Search (company, topic, keyword)",
+        placeholder="Reliance, FED, AI, war, inflation...",
         value=st.session_state.search_query
     )
 
 with f2:
     date_input = st.date_input(
-        "📅 Date",
+        "📅 Jump to date",
         value=st.session_state.filter_date or date.today()
     )
 
@@ -66,14 +68,27 @@ with f3:
         st.session_state.apply_filters = True
         st.session_state.seen.clear()
 
+        if st.session_state.search_query:
+            st.session_state.status_msg = (
+                f'Showing results for "{st.session_state.search_query}" '
+                f'on {st.session_state.filter_date.strftime("%d %b %Y")}'
+            )
+        else:
+            st.session_state.status_msg = (
+                f'Showing news for {st.session_state.filter_date.strftime("%d %b %Y")}'
+            )
+
 with f4:
     if st.button("🔄 Reset"):
         st.session_state.apply_filters = False
         st.session_state.search_query = ""
         st.session_state.filter_date = None
         st.session_state.seen.clear()
+        st.session_state.status_msg = "Filters cleared — showing all news"
 
-# ------------------ STATUS ------------------
+# ------------------ STATUS BANNERS ------------------
+st.caption(st.session_state.status_msg)
+
 if st.session_state.live:
     st.markdown(
         "<div style='background:red;color:white;padding:6px 10px;"
@@ -83,7 +98,7 @@ if st.session_state.live:
 else:
     st.info("Live mode OFF")
 
-# ------------------ FEED FETCH ------------------
+# ------------------ FEED UTILS ------------------
 def fetch_feed(url):
     try:
         return feedparser.parse(url)
@@ -130,7 +145,7 @@ def render_news(feeds):
                 return
         st.session_state.last_fetch = now
 
-    collected = []
+    items = []
 
     for url in feeds:
         feed = fetch_feed(url)
@@ -144,7 +159,7 @@ def render_news(feeds):
             except:
                 continue
 
-            # APPLY FILTERS ONLY IF USER CLICKED SEARCH
+            # Apply filters ONLY if Search clicked
             if st.session_state.apply_filters:
                 if st.session_state.filter_date:
                     if pub_ist.date() != st.session_state.filter_date:
@@ -159,21 +174,21 @@ def render_news(feeds):
                 continue
 
             st.session_state.seen.add(e.link)
+            items.append((pub_ist, e.title, e.link, get_source(e)))
 
-            collected.append(
-                (pub_ist, e.title, e.link, get_source(e))
-            )
+    items.sort(key=lambda x: x[0], reverse=True)
 
-    collected.sort(key=lambda x: x[0], reverse=True)
-
-    if not collected:
+    if not items:
         if st.session_state.apply_filters:
-            st.warning("No news found for selected filters.")
+            st.warning(
+                "No matching news for this date/search. "
+                "Try another keyword or click Reset."
+            )
         else:
             st.info("No new updates right now.")
         return
 
-    for pub, title, link, source in collected:
+    for pub, title, link, source in items:
         st.markdown(f"### {title}")
         st.write(f"🕒 {pub.strftime('%d %b %Y, %I:%M %p IST')}")
         st.markdown(
