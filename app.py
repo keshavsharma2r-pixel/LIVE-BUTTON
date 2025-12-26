@@ -29,12 +29,6 @@ if col1.button("🚀 Start Live"):
 if col2.button("🛑 Stop"):
     st.session_state.live = False
 
-refresh = st.slider(
-    "Auto refresh interval (seconds)",
-    30, 300, 60,
-    help="Cache-based auto refresh (Cloud safe)"
-)
-
 window = st.slider(
     "Show news from last (minutes)",
     60, 360, 180
@@ -50,9 +44,8 @@ if st.session_state.live:
 else:
     st.info("Live mode OFF")
 
-# ------------------ CACHED FEED ------------------
-@st.cache_data(ttl=60)
-def cached_feed(url):
+# ------------------ FEED FETCH (NO CACHE) ------------------
+def fetch_feed(url):
     try:
         return feedparser.parse(url)
     except:
@@ -114,7 +107,7 @@ def render_news(feeds, company=None):
     items = []
 
     for url in feeds:
-        feed = cached_feed(url)
+        feed = fetch_feed(url)
         if not feed:
             continue
 
@@ -226,8 +219,6 @@ st.markdown(
         📅 <b>Date:</b> {now_ist.strftime('%d %b %Y')}
         &nbsp;&nbsp;|&nbsp;&nbsp;
         🔴 <b>Live:</b> {"ON" if st.session_state.live else "OFF"}
-        <br>
-        ⚡ <b>Update mode:</b> Cache-based (~{refresh} sec)
     </div>
     """,
     unsafe_allow_html=True
