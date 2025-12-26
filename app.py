@@ -18,6 +18,8 @@ if "live" not in st.session_state:
     st.session_state.live = False
 if "seen" not in st.session_state:
     st.session_state.seen = set()
+if "last_update" not in st.session_state:
+    st.session_state.last_update = None
 
 # ------------------ CONTROLS ------------------
 col1, col2 = st.columns(2)
@@ -25,6 +27,7 @@ col1, col2 = st.columns(2)
 if col1.button("🚀 Start Live"):
     st.session_state.live = True
     st.session_state.seen.clear()
+    st.session_state.last_update = datetime.now(IST)
 
 if col2.button("🛑 Stop"):
     st.session_state.live = False
@@ -53,8 +56,7 @@ def fetch_feed(url):
 
 # ------------------ HELPERS ------------------
 def is_recent(dt_utc):
-    dt_ist = dt_utc.astimezone(IST)
-    return dt_ist >= datetime.now(IST) - timedelta(minutes=window)
+    return dt_utc.astimezone(IST) >= datetime.now(IST) - timedelta(minutes=window)
 
 def get_source(entry):
     if hasattr(entry, "source") and hasattr(entry.source, "title"):
@@ -67,7 +69,6 @@ def get_source(entry):
 
 # ------------------ SOURCES ------------------
 
-# 🌍 GOOGLE NEWS – GLOBAL AGGREGATOR
 GOOGLE_GLOBAL = [
     "https://news.google.com/rss/search?q=breaking+news",
     "https://news.google.com/rss/search?q=world+news",
@@ -80,7 +81,6 @@ GOOGLE_GLOBAL = [
     "https://news.google.com/rss/search?q=central+bank+policy",
 ]
 
-# 🏛️ TIER-1 GLOBAL PUBLISHERS
 GLOBAL_TIER1 = [
     "https://www.reuters.com/rssFeed/worldNews",
     "https://www.reuters.com/rssFeed/businessNews",
@@ -89,7 +89,6 @@ GLOBAL_TIER1 = [
     "https://feeds.a.dj.com/rss/RSSWorldNews.xml",
 ]
 
-# 🌎 REGIONAL / CONTINENTAL
 REGIONAL_GLOBAL = [
     "https://news.google.com/rss/search?q=asia+markets",
     "https://news.google.com/rss/search?q=europe+markets",
@@ -98,7 +97,6 @@ REGIONAL_GLOBAL = [
     "https://news.google.com/rss/search?q=latin+america+markets",
 ]
 
-# 🇮🇳 INDIA – GENERAL
 INDIA_GENERAL = [
     "https://news.google.com/rss/search?q=India+breaking+news",
     "https://news.google.com/rss/search?q=India+economy",
@@ -107,32 +105,27 @@ INDIA_GENERAL = [
     "https://feeds.feedburner.com/ndtvnews-top-stories",
 ]
 
-# 📈 INDIA MARKETS
-NSE_BASE = [
+MARKET_FEEDS = [
     "https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms",
     "https://www.moneycontrol.com/rss/marketreports.xml",
     "https://www.business-standard.com/rss/markets-106.rss",
     "https://www.livemint.com/rss/markets",
-]
-
-BSE_BASE = [
-    "https://www.livemint.com/rss/markets",
-]
-
-NSE_COMPANIES = [
-    "Reliance Industries", "Tata Motors", "HDFC Bank",
-    "ICICI Bank", "Infosys", "TCS", "Adani Enterprises"
+    "https://news.google.com/rss/search?q=stock+market+news",
+    "https://news.google.com/rss/search?q=global+markets",
+    "https://news.google.com/rss/search?q=earnings+results",
+    "https://news.google.com/rss/search?q=mergers+acquisitions",
+    "https://www.reuters.com/rssFeed/businessNews",
 ]
 
 GLOBAL_FEEDS = GOOGLE_GLOBAL + GLOBAL_TIER1 + REGIONAL_GLOBAL
 
 # ------------------ UI TABS ------------------
 tab_global, tab_india, tab_market = st.tabs(
-    ["🌍 Global", "🇮🇳 India General", "📈 India Market"]
+    ["🌍 Global", "🇮🇳 India General", "📈 Market"]
 )
 
 # ------------------ RENDER NEWS ------------------
-def render_news(feeds, company=None):
+def render_news(feeds):
     items = []
 
     for url in feeds:
@@ -144,10 +137,6 @@ def render_news(feeds, company=None):
             try:
                 pub_utc = datetime(*e.published_parsed[:6], tzinfo=UTC)
             except:
-                continue
-
-            text = f"{e.title} {getattr(e,'summary','')}".lower()
-            if company and company.lower() not in text:
                 continue
 
             if not is_recent(pub_utc):
@@ -165,7 +154,9 @@ def render_news(feeds, company=None):
 
     items.sort(key=lambda x: x[0], reverse=True)
 
-    if not items:
+    if items:
+        st.session_state.last_update = datetime.now(IST)
+    else:
         st.warning("No fresh news right now.")
 
     for pub_ist, title, link, source in items[:50]:
@@ -198,22 +189,26 @@ with tab_india:
 
 # ------------------ MARKET ------------------
 with tab_market:
-    tab_nse, tab_bse = st.tabs(["📊 NSE", "🏦 BSE"])
+    if st.session_state.live:
+        render_news(MARKET_FEEDS)
+    else:
+        st.info("Start live to see market news")
 
-    with tab_nse:
-        company = st.selectbox("Filter NSE company", ["All"] + NSE_COMPANIES)
-        feeds = list(NSE_BASE)
-        if company != "All":
-            q = urllib.parse.quote_plus(company + " stock")
-            feeds.append(f"https://news.google.com/rss/search?q={q}")
-
-        if st.session_state.live:
-            render_news(feeds, None if company == "All" else company)
-        else:
-            st.info("Start live to see NSE news")
-
-    with tab_bse:
-        if st.session_state.live:
-            render_news(BSE_BASE)
-        else:
-            st.info("Start live to see BSE news")
+# ------------------ LAST UPDATE DISPLAY ------------------
+if st.session_state.last_update:
+    st.markdown(
+        f"""
+        <div style="
+            background:#f8fafc;
+            padding:10px 14px;
+            border-radius:8px;
+            font-size:14px;
+            font-weight:600;
+            margin-top:14px;
+        ">
+            ⏱ <b>Last Update:</b>
+            {st.session_state.last_update.strftime('%d %b %Y, %I:%M %p IST')}
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
