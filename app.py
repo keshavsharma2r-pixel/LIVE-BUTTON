@@ -32,7 +32,7 @@ if col2.button("🛑 Stop"):
 refresh = st.slider(
     "Auto refresh interval (seconds)",
     30, 300, 60,
-    help="Controls how often news is refreshed automatically (cache TTL)"
+    help="Cache-based auto refresh (Cloud safe)"
 )
 
 window = st.slider(
@@ -44,7 +44,7 @@ window = st.slider(
 if st.session_state.live:
     st.markdown(
         "<div style='color:white;background:red;padding:6px 12px;"
-        "border-radius:6px;font-weight:bold;'>🔴 LIVE (Cache-based)</div>",
+        "border-radius:6px;font-weight:bold;'>🔴 LIVE</div>",
         unsafe_allow_html=True
     )
 else:
@@ -58,10 +58,23 @@ def cached_feed(url):
     except:
         return None
 
-# ------------------ TIME FILTER ------------------
+# ------------------ HELPERS ------------------
 def is_recent(dt_utc):
     dt_ist = dt_utc.astimezone(IST)
     return dt_ist >= datetime.now(IST) - timedelta(minutes=window)
+
+def get_source(entry):
+    # Prefer RSS source title
+    if hasattr(entry, "source") and hasattr(entry.source, "title"):
+        return entry.source.title
+
+    # Fallback: extract domain
+    try:
+        domain = urllib.parse.urlparse(entry.link).netloc
+        domain = domain.replace("www.", "")
+        return domain.upper()
+    except:
+        return "UNKNOWN"
 
 # ------------------ SOURCES ------------------
 GLOBAL_FEEDS = [
@@ -79,6 +92,7 @@ INDIA_GENERAL = [
 NSE_BASE = [
     "https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms",
     "https://www.moneycontrol.com/rss/marketreports.xml",
+    "https://www.business-standard.com/rss/markets-106.rss",
 ]
 
 BSE_BASE = [
@@ -121,18 +135,37 @@ def render_news(feeds, company=None):
                 continue
 
             pub_ist = pub_utc.astimezone(IST)
-            items.append((pub_ist, e.title, e.link))
+            source = get_source(e)
+
+            items.append((pub_ist, e.title, e.link, source))
 
     items.sort(key=lambda x: x[0], reverse=True)
 
     if not items:
         st.warning("No fresh news right now.")
 
-    for pub_ist, title, link in items[:50]:
+    for pub_ist, title, link, source in items[:50]:
         st.session_state.seen.add(link)
+
         st.markdown(f"### {title}")
         st.write(f"🕒 {pub_ist.strftime('%d %b %Y, %I:%M %p IST')}")
-        st.markdown(f"[Open]({link})")
+
+        st.markdown(
+            f"""
+            <span style="
+                background:#e5e7eb;
+                padding:4px 8px;
+                border-radius:6px;
+                font-size:12px;
+                font-weight:600;
+            ">
+                📰 {source}
+            </span>
+            """,
+            unsafe_allow_html=True
+        )
+
+        st.markdown(f"[Open Article]({link})")
         st.divider()
 
 # ------------------ TAB: GLOBAL ------------------
@@ -177,7 +210,7 @@ with tab_market:
         else:
             st.info("Start live to see BSE news")
 
-# ------------------ REAL DATE & TIME PANEL ------------------
+# ------------------ STATUS PANEL ------------------
 now_ist = datetime.now(IST)
 
 st.markdown(
@@ -192,11 +225,9 @@ st.markdown(
     ">
         📅 <b>Date:</b> {now_ist.strftime('%d %b %Y')}
         &nbsp;&nbsp;|&nbsp;&nbsp;
-        ⏰ <b>Time:</b> {now_ist.strftime('%I:%M:%S %p')} IST
+        🔴 <b>Live:</b> {"ON" if st.session_state.live else "OFF"}
         <br>
-        🔁 <b>News refresh mode:</b> Cache-based (~{refresh} seconds)
-        <br>
-        🔴 <b>Live status:</b> {"ON" if st.session_state.live else "OFF"}
+        ⚡ <b>Update mode:</b> Cache-based (~{refresh} sec)
     </div>
     """,
     unsafe_allow_html=True
