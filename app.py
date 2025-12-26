@@ -2,7 +2,9 @@ import streamlit as st
 import feedparser
 from datetime import datetime, date
 from zoneinfo import ZoneInfo
-import socket, urllib.parse
+import socket
+import urllib.parse
+import time
 
 # ------------------ TIMEZONE ------------------
 IST = ZoneInfo("Asia/Kolkata")
@@ -10,7 +12,7 @@ UTC = ZoneInfo("UTC")
 socket.setdefaulttimeout(10)
 
 # ------------------ PAGE CONFIG ------------------
-st.set_page_config(layout="wide", page_title="NEWS")
+st.set_page_config(layout="wide", page_title="NEWS", page_icon="📰")
 st.title("📰 NEWS")
 
 # ------------------ SESSION STATE ------------------
@@ -29,17 +31,20 @@ if "search_query" not in st.session_state:
 if "filter_date" not in st.session_state:
     st.session_state.filter_date = None
 
-# ------------------ TOP RIGHT CONTROLS ------------------
-left, right = st.columns([6, 2])
+# ------------------ TOP CONTROLS ------------------
+col1, col2, col3 = st.columns([6, 1, 1])
 
-with right:
-    if st.button("🔴 LIVE"):
+with col2:
+    if st.button("🔴 LIVE", use_container_width=True):
         st.session_state.live = True
         st.session_state.seen.clear()
         st.session_state.last_fetch = None
+        st.rerun()
 
-    if st.button("⏹ STOP"):
+with col3:
+    if st.button("⏹ STOP", use_container_width=True):
         st.session_state.live = False
+        st.rerun()
 
 # ------------------ FILTER CONTROLS ------------------
 st.divider()
@@ -50,51 +55,94 @@ with f1:
     search_input = st.text_input(
         "🔍 Search",
         placeholder="Company, keyword, topic…",
-        value=st.session_state.search_query
+        value=st.session_state.search_query,
+        key="search_input"
     )
 
 with f2:
     date_input = st.date_input(
         "📅 Date",
-        value=st.session_state.filter_date or date.today()
+        value=st.session_state.filter_date,
+        key="date_input"
     )
 
 with f3:
-    if st.button("🔍 Search"):
+    if st.button("🔍 Apply", use_container_width=True):
         st.session_state.search_query = search_input.strip()
         st.session_state.filter_date = date_input
-        st.session_state.apply_filters = True
+        st.session_state.apply_filters = bool(search_input.strip() or date_input)
         st.session_state.seen.clear()
+        st.rerun()
 
 with f4:
-    if st.button("🔄 Reset"):
+    if st.button("🔄 Reset", use_container_width=True):
         st.session_state.apply_filters = False
         st.session_state.search_query = ""
         st.session_state.filter_date = None
         st.session_state.seen.clear()
+        st.rerun()
 
-# ------------------ STATUS ------------------
-if st.session_state.live:
-    st.markdown(
-        "<div style='background:red;color:white;padding:6px 10px;"
-        "border-radius:6px;font-weight:bold;width:max-content;'>🔴 LIVE</div>",
-        unsafe_allow_html=True
-    )
-else:
-    st.info("Live mode OFF")
+# ------------------ STATUS BAR ------------------
+status_col1, status_col2 = st.columns([1, 3])
+
+with status_col1:
+    if st.session_state.live:
+        st.markdown(
+            "<div style='background:#ef4444;color:white;padding:8px 12px;"
+            "border-radius:8px;font-weight:bold;text-align:center;'>"
+            "🔴 LIVE MODE</div>",
+            unsafe_allow_html=True
+        )
+    else:
+        st.markdown(
+            "<div style='background:#64748b;color:white;padding:8px 12px;"
+            "border-radius:8px;font-weight:bold;text-align:center;'>"
+            "⏹ STOPPED</div>",
+            unsafe_allow_html=True
+        )
+
+with status_col2:
+    if st.session_state.last_fetch:
+        last_update = st.session_state.last_fetch.strftime("%I:%M:%S %p")
+        st.info(f"🕐 Last updated: {last_update}")
+
+st.divider()
 
 # ------------------ FEED FETCH ------------------
+@st.cache_data(ttl=60)
 def fetch_feed(url):
     try:
-        return feedparser.parse(url)
-    except:
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+        return feedparser.parse(url, request_headers=headers)
+    except Exception as e:
+        st.error(f"Error fetching {url}: {str(e)}")
         return None
 
 def get_source(entry):
     try:
-        return urllib.parse.urlparse(entry.link).netloc.replace("www.", "").upper()
+        domain = urllib.parse.urlparse(entry.link).netloc.replace("www.", "")
+        return domain.split('.')[0].upper()
     except:
         return "UNKNOWN"
+
+# ------------------ FRESHNESS TAG ------------------
+def freshness_label(pub_time):
+    delta = datetime.now(IST) - pub_time
+    minutes = int(delta.total_seconds() / 60)
+
+    if minutes < 0:
+        return "🔵 FUTURE", "Just now"
+    elif minutes <= 15:
+        return "🟢 LIVE", f"{minutes} min ago"
+    elif minutes <= 120:
+        hours = minutes // 60
+        mins = minutes % 60
+        return "🟡 RECENT", f"{hours}h {mins}m ago"
+    elif minutes <= 1440:  # 24 hours
+        return "⚪ TODAY", f"{minutes // 60}h ago"
+    else:
+        days = minutes // 1440
+        return "⚫ OLDER", f"{days}d ago"
 
 # ------------------ SOURCES ------------------
 GLOBAL_FEEDS = [
@@ -120,76 +168,108 @@ tab_global, tab_india, tab_market = st.tabs(
 )
 
 # ------------------ RENDER NEWS ------------------
-def render_news(feeds):
+def render_news(feeds, tab_name):
     FETCH_INTERVAL = 60
     now = datetime.now(IST)
 
+    # Handle live mode refresh logic
     if st.session_state.live:
         if st.session_state.last_fetch:
-            if (now - st.session_state.last_fetch).total_seconds() < FETCH_INTERVAL:
+            elapsed = (now - st.session_state.last_fetch).total_seconds()
+            if elapsed < FETCH_INTERVAL:
+                time.sleep(2)
+                st.rerun()
                 return
         st.session_state.last_fetch = now
 
-    collected = []
+    # Show loading indicator
+    with st.spinner(f"Fetching {tab_name} news..."):
+        collected = []
 
-    for url in feeds:
-        feed = fetch_feed(url)
-        if not feed:
-            continue
-
-        for e in feed.entries:
-            try:
-                pub_utc = datetime(*e.published_parsed[:6], tzinfo=UTC)
-                pub_ist = pub_utc.astimezone(IST)
-            except:
+        for url in feeds:
+            feed = fetch_feed(url)
+            if not feed or not feed.entries:
                 continue
 
-            # APPLY FILTERS ONLY IF USER CLICKED SEARCH
-            if st.session_state.apply_filters:
-                if st.session_state.filter_date:
-                    if pub_ist.date() != st.session_state.filter_date:
+            for e in feed.entries:
+                try:
+                    # Parse publication time
+                    if hasattr(e, 'published_parsed') and e.published_parsed:
+                        pub_utc = datetime(*e.published_parsed[:6], tzinfo=UTC)
+                    elif hasattr(e, 'updated_parsed') and e.updated_parsed:
+                        pub_utc = datetime(*e.updated_parsed[:6], tzinfo=UTC)
+                    else:
                         continue
+                    
+                    pub_ist = pub_utc.astimezone(IST)
+                except Exception:
+                    continue
 
-                if st.session_state.search_query:
-                    text = f"{e.title} {getattr(e,'summary','')}".lower()
-                    if st.session_state.search_query.lower() not in text:
-                        continue
+                # Apply filters
+                if st.session_state.apply_filters:
+                    if st.session_state.filter_date:
+                        if pub_ist.date() != st.session_state.filter_date:
+                            continue
 
-            if e.link in st.session_state.seen:
-                continue
+                    if st.session_state.search_query:
+                        text = f"{e.title} {getattr(e, 'summary', '')}".lower()
+                        if st.session_state.search_query.lower() not in text:
+                            continue
 
-            st.session_state.seen.add(e.link)
+                # Skip duplicates
+                if e.link in st.session_state.seen:
+                    continue
 
-            collected.append(
-                (pub_ist, e.title, e.link, get_source(e))
-            )
+                st.session_state.seen.add(e.link)
+                collected.append((pub_ist, e.title, e.link, get_source(e)))
 
+    # Sort by time (newest first)
     collected.sort(key=lambda x: x[0], reverse=True)
 
+    # Display article count
+    if collected:
+        st.success(f"📊 Found {len(collected)} articles")
+    
+    # Handle empty state
     if not collected:
         if st.session_state.apply_filters:
-            st.warning("No news found for selected filters.")
+            st.warning("🔍 No articles match your filters. Try adjusting search terms or date.")
         else:
-            st.info("No new updates right now.")
+            st.info("📭 No new articles at the moment. Check back soon!")
         return
 
+    # Render articles
     for pub, title, link, source in collected:
-        st.markdown(f"### {title}")
-        st.write(f"🕒 {pub.strftime('%d %b %Y, %I:%M %p IST')}")
-        st.markdown(
-            f"<span style='background:#e5e7eb;padding:4px 8px;"
-            f"border-radius:6px;font-size:12px;font-weight:600;'>📰 {source}</span>",
-            unsafe_allow_html=True
-        )
-        st.markdown(f"[Open Article]({link})")
-        st.divider()
+        tag, age = freshness_label(pub)
+
+        with st.container():
+            st.markdown(f"### {title}")
+            
+            info_col1, info_col2 = st.columns([2, 3])
+            with info_col1:
+                st.markdown(
+                    f"<span style='background:#e5e7eb;padding:4px 10px;"
+                    f"border-radius:6px;font-size:13px;font-weight:600;'>"
+                    f"📰 {source}</span>",
+                    unsafe_allow_html=True
+                )
+            with info_col2:
+                st.write(f"{tag} • {age}")
+            
+            st.markdown(f"🔗 [Read Full Article]({link})")
+            st.divider()
+
+    # Auto-refresh in live mode
+    if st.session_state.live:
+        time.sleep(FETCH_INTERVAL)
+        st.rerun()
 
 # ------------------ TAB CONTENT ------------------
 with tab_global:
-    render_news(GLOBAL_FEEDS)
+    render_news(GLOBAL_FEEDS, "Global")
 
 with tab_india:
-    render_news(INDIA_FEEDS)
+    render_news(INDIA_FEEDS, "India")
 
 with tab_market:
-    render_news(MARKET_FEEDS)
+    render_news(MARKET_FEEDS, "Market")
