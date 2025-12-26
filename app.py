@@ -62,7 +62,8 @@ if "settings" not in st.session_state:
         "auto_summarize": False,
         "sentiment_analysis": True,
         "exclude_keywords": [],
-        "priority_sources": []
+        "priority_sources": [],
+        "alert_keywords": []
     }
 if "selected_categories" not in st.session_state:
     st.session_state.selected_categories = []
@@ -157,6 +158,18 @@ if st.session_state.get("show_settings", False):
             keywords = [k.strip().lower() for k in exclude_input.split(",") if k.strip()]
             st.session_state.settings["exclude_keywords"] = keywords
             st.success("Exclusions saved!")
+        
+        st.divider()
+        
+        st.subheader("🔔 Keyword Alerts")
+        alert_input = st.text_input("Get notified for keywords (comma-separated)")
+        if st.button("Save Alerts"):
+            keywords = [k.strip().lower() for k in alert_input.split(",") if k.strip()]
+            st.session_state.settings["alert_keywords"] = keywords
+            st.success("Alerts saved! You'll see 🔔 for matching articles.")
+        
+        if st.session_state.settings["alert_keywords"]:
+            st.info(f"🔔 Watching: {', '.join(st.session_state.settings['alert_keywords'])}")
 
 # ------------------ CONTROLS ------------------
 col1, col2, col3, col4 = st.columns([4, 1, 1, 1])
@@ -214,8 +227,14 @@ with f4:
         st.rerun()
 
 with f5:
-    if st.button("📊 Stats", use_container_width=True):
-        st.session_state.show_stats = not st.session_state.get("show_stats", False)
+    export_menu = st.selectbox("📤 Export", ["None", "CSV", "JSON", "PDF"], key="export_select")
+    if export_menu != "None":
+        st.session_state.export_format = export_menu
+
+# Trending Topics
+with st.expander("🔥 Trending Topics"):
+    if st.button("🔍 Analyze Trends"):
+        st.session_state.show_trends = True
 
 # Advanced filters
 with st.expander("🎯 Advanced Filters"):
@@ -271,6 +290,44 @@ def fetch_feed(url):
         return feedparser.parse(url, request_headers=headers)
     except:
         return None
+
+async def fetch_article_content(url):
+    """Fetch full article content from URL"""
+    try:
+        response = await fetch(url, {
+            'method': 'GET',
+            'headers': {'User-Agent': 'Mozilla/5.0'}
+        })
+        html = await response.text()
+        return html
+    except:
+        return None
+
+async def generate_summary(article_text, title):
+    """Generate AI summary using Claude API"""
+    try:
+        response = await fetch("https://api.anthropic.com/v1/messages", {
+            "method": "POST",
+            "headers": {
+                "Content-Type": "application/json",
+            },
+            "body": JSON.stringify({
+                "model": "claude-sonnet-4-20250514",
+                "max_tokens": 1000,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": f"Summarize this news article in 3 concise bullet points. Title: {title}\n\nArticle: {article_text[:3000]}"
+                    }
+                ]
+            })
+        })
+        
+        data = await response.json()
+        summary = data.content[0].text if data.content else "Summary unavailable"
+        return summary
+    except Exception as e:
+        return f"Error generating summary: {str(e)}"
 
 def get_source(entry):
     try:
@@ -345,6 +402,60 @@ def should_exclude(title, summary=""):
     exclude = st.session_state.settings["exclude_keywords"]
     return any(kw in text for kw in exclude)
 
+def extract_keywords(articles):
+    """Extract trending keywords from articles"""
+    text = " ".join([a['title'] for a in articles]).lower()
+    
+    # Remove common words
+    stop_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 
+                  'of', 'with', 'by', 'from', 'as', 'is', 'was', 'are', 'been', 'be',
+                  'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could',
+                  'this', 'that', 'these', 'those', 'i', 'you', 'he', 'she', 'it', 'we', 'they'}
+    
+    words = re.findall(r'\b[a-z]{4,}\b', text)
+    words = [w for w in words if w not in stop_words]
+    
+    return Counter(words).most_common(15)
+
+def export_to_csv(articles):
+    """Export articles to CSV format"""
+    import io
+    output = io.StringIO()
+    output.write("Title,Source,Category,Sentiment,Time,Link\n")
+    for a in articles:
+        output.write(f'"{a["title"]}",{a["source"]},{a["category"]},{a["sentiment"]},{a["time"]},{a["link"]}\n')
+    return output.getvalue()
+
+def export_to_json(articles):
+    """Export articles to JSON format"""
+    data = [{
+        'title': a['title'],
+        'source': a['source'],
+        'category': a['category'],
+        'sentiment': a['sentiment'],
+        'time': str(a['time']),
+        'link': a['link']
+    } for a in articles]
+    return json.dumps(data, indent=2)
+
+def find_related_articles(article, all_articles, limit=3):
+    """Find related articles based on keyword similarity"""
+    article_words = set(re.findall(r'\b[a-z]{4,}\b', article['title'].lower()))
+    
+    related = []
+    for other in all_articles:
+        if other['link'] == article['link']:
+            continue
+        
+        other_words = set(re.findall(r'\b[a-z]{4,}\b', other['title'].lower()))
+        similarity = len(article_words & other_words)
+        
+        if similarity >= 2:
+            related.append((similarity, other))
+    
+    related.sort(key=lambda x: x[0], reverse=True)
+    return [r[1] for r in related[:limit]]
+
 # ------------------ FEEDS ------------------
 GLOBAL_FEEDS = [
     "https://news.google.com/rss",
@@ -402,6 +513,42 @@ if st.session_state.get("show_stats", False):
     
     st.divider()
     st.info("More analytics coming soon: trending topics, reading time, favorite sources...")
+    
+    st.stop()
+
+# ------------------ TRENDING TOPICS ------------------
+if st.session_state.get("show_trends", False):
+    st.header("🔥 Trending Topics")
+    st.caption("Most mentioned keywords across all articles")
+    
+    # Collect all articles
+    all_articles = []
+    for feeds in [GLOBAL_FEEDS, INDIA_FEEDS, MARKET_FEEDS]:
+        for url in feeds:
+            feed = fetch_feed(url)
+            if feed and feed.entries:
+                for e in feed.entries[:50]:  # Limit per feed
+                    all_articles.append({'title': e.title})
+    
+    if all_articles:
+        keywords = extract_keywords(all_articles)
+        
+        # Display as pills
+        cols = st.columns(5)
+        for idx, (word, count) in enumerate(keywords):
+            with cols[idx % 5]:
+                st.markdown(
+                    f"<div style='background:#3b82f6;color:white;padding:8px 12px;"
+                    f"border-radius:20px;text-align:center;margin:5px;'>"
+                    f"<b>{word}</b><br><small>{count} times</small></div>",
+                    unsafe_allow_html=True
+                )
+    else:
+        st.warning("No articles available for trend analysis")
+    
+    if st.button("← Back"):
+        st.session_state.show_trends = False
+        st.rerun()
     
     st.stop()
 
@@ -479,6 +626,12 @@ def render_news(feeds, tab_name):
                 sentiment, color = analyze_sentiment(title, summary) if st.session_state.settings["sentiment_analysis"] else ("", "")
                 image = get_image(e) if st.session_state.settings["show_images"] else None
                 
+                # Check for keyword alerts
+                is_alert = False
+                if st.session_state.settings["alert_keywords"]:
+                    text = f"{title} {summary}".lower()
+                    is_alert = any(kw in text for kw in st.session_state.settings["alert_keywords"])
+                
                 collected.append({
                     'time': pub_ist,
                     'title': title,
@@ -490,10 +643,36 @@ def render_news(feeds, tab_name):
                     'color': color,
                     'image': image,
                     'is_read': e.link in st.session_state.read_articles,
-                    'is_bookmarked': e.link in st.session_state.bookmarks
+                    'is_bookmarked': e.link in st.session_state.bookmarks,
+                    'is_alert': is_alert
                 })
         
         collected.sort(key=lambda x: x['time'], reverse=True)
+        
+        # Handle export
+        if st.session_state.get("export_format"):
+            export_format = st.session_state.export_format
+            
+            if export_format == "CSV":
+                csv_data = export_to_csv(collected)
+                st.download_button(
+                    label="📥 Download CSV",
+                    data=csv_data,
+                    file_name=f"news_export_{datetime.now(IST).strftime('%Y%m%d_%H%M%S')}.csv",
+                    mime="text/csv"
+                )
+            elif export_format == "JSON":
+                json_data = export_to_json(collected)
+                st.download_button(
+                    label="📥 Download JSON",
+                    data=json_data,
+                    file_name=f"news_export_{datetime.now(IST).strftime('%Y%m%d_%H%M%S')}.json",
+                    mime="application/json"
+                )
+            elif export_format == "PDF":
+                st.info("📄 PDF export coming soon! Will include formatted articles with images.")
+            
+            st.session_state.export_format = None
         
         if collected:
             st.success(f"📊 {len(collected)} articles found")
@@ -525,6 +704,14 @@ def render_news(feeds, tab_name):
 
 def render_article_list(article):
     with st.container():
+        # Alert badge
+        if article.get('is_alert'):
+            st.markdown(
+                "<div style='background:#ef4444;color:white;padding:4px 12px;border-radius:6px;"
+                "font-weight:bold;width:max-content;margin-bottom:8px;'>🔔 ALERT: Keyword Match!</div>",
+                unsafe_allow_html=True
+            )
+        
         # Header
         col1, col2, col3 = st.columns([6, 1, 1])
         
@@ -583,6 +770,40 @@ def render_article_list(article):
         if article['summary']:
             with st.expander("📄 Preview"):
                 st.write(article['summary'][:300] + "...")
+        
+        # Related articles
+        if st.button("🔗 Find Related", key=f"rel_{article['link']}"):
+            st.session_state[f"show_related_{article['link']}"] = not st.session_state.get(f"show_related_{article['link']}", False)
+        
+        if st.session_state.get(f"show_related_{article['link']}", False):
+            # This would need access to all articles - simplified for now
+            st.info("🔗 Related articles feature: Finds similar stories from different sources based on keyword matching.")
+        
+        # AI Summary button
+        if st.button("✨ AI Summary", key=f"sum_{article['link']}"):
+            with st.spinner("Generating summary..."):
+                st.info("AI Summarization requires Claude API integration. Feature coming soon!")
+                # Uncomment when ready:
+                # content = await fetch_article_content(article['link'])
+                # summary = await generate_summary(content, article['title'])
+                # st.success(summary)
+        
+        # Share buttons
+        share_col1, share_col2, share_col3 = st.columns(3)
+        
+        share_text = urllib.parse.quote(f"{article['title']} {article['link']}")
+        
+        with share_col1:
+            whatsapp_url = f"https://wa.me/?text={share_text}"
+            st.markdown(f"[📱 WhatsApp]({whatsapp_url})", unsafe_allow_html=True)
+        
+        with share_col2:
+            twitter_url = f"https://twitter.com/intent/tweet?text={share_text}"
+            st.markdown(f"[🐦 Twitter]({twitter_url})", unsafe_allow_html=True)
+        
+        with share_col3:
+            linkedin_url = f"https://www.linkedin.com/sharing/share-offsite/?url={urllib.parse.quote(article['link'])}"
+            st.markdown(f"[💼 LinkedIn]({linkedin_url})", unsafe_allow_html=True)
         
         st.markdown(f"🔗 [Read Full Article]({article['link']})")
         st.divider()
