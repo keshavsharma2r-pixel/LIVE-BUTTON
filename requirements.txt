@@ -2,6 +2,7 @@ streamlit>=1.28.0
 feedparser>=6.0.10
 python-dateutil>=2.8.2
 tzdata>=2023.3
+streamlit-autorefresh>=0.0.1
 
 # Optional: For enhanced features
 # Uncomment when needed:
