@@ -521,7 +521,7 @@ if st.session_state.get("show_bookmarks", False):
             with col2:
                 if st.button("🗑️", key=f"del_{link}"):
                     del st.session_state.bookmarks[link]
-                    return
+                    st.rerun()
     st.stop()
 
 # ------------------ TRENDING VIEW ------------------
