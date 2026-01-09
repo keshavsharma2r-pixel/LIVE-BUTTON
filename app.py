@@ -320,7 +320,8 @@ st.markdown("""
         border-radius: 4px;
     }
     .logo-header {
-    margin: 0 0 20px 6px;
+    margin: -6px 0 16px 6px;
+}
 }
     
     .logo-title {
