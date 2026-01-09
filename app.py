@@ -321,7 +321,8 @@ with col_r:
         st.session_state.force_live = True
         st.session_state.last_fetch = None
         st.session_state.seen.clear()   # optional but recommended
-        return
+        st.rerun()
+
 
 # ------------------ STATS ------------------
 col1, col2, col3, col4, col5 = st.columns(5)
