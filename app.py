@@ -18,7 +18,7 @@ socket.setdefaulttimeout(5)  # Reduced timeout for faster loading
 
 st.set_page_config(
     layout="wide", 
-    page_title="NEWS PRO", 
+    page_title="MARKET UPDATES", 
     page_icon="📰",
     initial_sidebar_state="collapsed"
 )
