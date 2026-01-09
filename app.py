@@ -668,7 +668,7 @@ def render_compact(a):
         </div>
         """, unsafe_allow_html=True)
     with col2:
-        st.link_button("Open", a['link'], use_container_width=True, key=f"o_{a['link']}")
+        st.link_button("Open", a['link'], use_container_width=True)
 
 # ------------------ TABS ------------------
 tabs = st.tabs(["🌍 Global", "🇮🇳 India", "📈 Markets"])
