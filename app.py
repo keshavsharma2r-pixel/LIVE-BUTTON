@@ -329,38 +329,13 @@ st_autorefresh(interval=45000, key="live_refresh")
 st.caption(f"Last refresh: {datetime.now().strftime('%H:%M:%S')}")
 
 # ------------------ STATS ------------------
-col1, col2, col3, col4, col5 = st.columns(5)
+col1, col5 = st.columns(2)
 
 with col1:
     st.markdown(f"""
     <div class="stat-card">
         <div class="stat-label">Articles</div>
         <div class="stat-number">{len(st.session_state.seen)}</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-with col2:
-    st.markdown(f"""
-    <div class="stat-card">
-        <div class="stat-label">Read</div>
-        <div class="stat-number" style="color: #4ade80;">{len(st.session_state.read_articles)}</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-with col3:
-    st.markdown(f"""
-    <div class="stat-card">
-        <div class="stat-label">Saved</div>
-        <div class="stat-number" style="color: #fbbf24;">{len(st.session_state.bookmarks)}</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-with col4:
-    read_rate = int((len(st.session_state.read_articles) / max(len(st.session_state.seen), 1)) * 100)
-    st.markdown(f"""
-    <div class="stat-card">
-        <div class="stat-label">Read Rate</div>
-        <div class="stat-number" style="color: #a78bfa;">{read_rate}%</div>
     </div>
     """, unsafe_allow_html=True)
 
