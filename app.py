@@ -322,18 +322,16 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+st.markdown("""
+<div class="logo-header">
+    <div class="logo-title">MARKET NEWS</div>
+    <div class="logo-subtitle">Work in Progress</div>
+</div>
+""", unsafe_allow_html=True)
+
+
 # ------------------ HEADER ------------------
 col_l, col_r = st.columns([6, 1])
-
-with col_l:
-    st.markdown("""
-    <div class="main-header">
-        <div>
-            <h1 class="header-title">MARKET NEWS</h1>
-            <p class="header-subtitle">WORK IN PROGESS</p>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
 
 with col_r:
     if st.button("🔴 LIVE", use_container_width=True):
