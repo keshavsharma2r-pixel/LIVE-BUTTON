@@ -536,11 +536,11 @@ def render_news(feeds, tab_name):
     now = datetime.now(IST)
     
     # Auto-refresh logic
-    if st.session_state.last_fetch:
-        elapsed = (now - st.session_state.last_fetch).total_seconds()
+    if not st.session_state.force_live and st.session_state.last_fetch:
+    elapsed = (now - st.session_state.last_fetch).total_seconds()
     if elapsed < REFRESH:
-            return
-        
+        return
+
     st.session_state.force_live = False    
     st.session_state.last_fetch = now
     
