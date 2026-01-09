@@ -394,7 +394,7 @@ with col4:
     if st.button("🔄 REFRESH", use_container_width=True):
         st.session_state.seen.clear()
         st.session_state.last_fetch = None
-        return
+        st.rerun()
 
 st.markdown("<br>", unsafe_allow_html=True)
 
