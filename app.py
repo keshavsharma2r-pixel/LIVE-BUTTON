@@ -48,7 +48,7 @@ if "settings" not in st.session_state:
 st.markdown("""
 <style>
     .stApp {
-        background: #0a0e1a;
+        background: #ffffff;
     }
     
     #MainMenu, footer, header {visibility: hidden;}
