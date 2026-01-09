@@ -323,6 +323,8 @@ with col_r:
         st.session_state.seen.clear()   # optional but recommended
         st.rerun()
 
+# 🔄 AUTO REFRESH (ADD THIS LINE)
+st.autorefresh(interval=45000, key="live_refresh")
 
 # ------------------ STATS ------------------
 col1, col2, col3, col4, col5 = st.columns(5)
