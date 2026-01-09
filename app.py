@@ -1,6 +1,7 @@
 import streamlit as st
 import feedparser
 from datetime import datetime, date
+from streamlit_autorefresh import st_autorefresh
 from zoneinfo import ZoneInfo
 import socket
 import urllib.parse
@@ -324,7 +325,7 @@ with col_r:
         st.rerun()
 
 # 🔄 AUTO REFRESH (ADD THIS LINE)
-st.autorefresh(interval=45000, key="live_refresh")
+st_autorefresh(interval=45000, key="live_refresh")
 
 # ------------------ STATS ------------------
 col1, col2, col3, col4, col5 = st.columns(5)
