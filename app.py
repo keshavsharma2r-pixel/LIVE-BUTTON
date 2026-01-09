@@ -327,6 +327,9 @@ with col_r:
 # 🔄 AUTO REFRESH (ADD THIS LINE)
 st_autorefresh(interval=45000, key="live_refresh")
 
+# ✅ REFRESH INDICATOR (METHOD 1)
+st.caption(f"Last refresh: {datetime.now().strftime('%H:%M:%S')}")
+
 # ------------------ STATS ------------------
 col1, col2, col3, col4, col5 = st.columns(5)
 
