@@ -351,11 +351,7 @@ with col5:
 st.markdown("<br>", unsafe_allow_html=True)
 
 # ------------------ QUICK ACTIONS ------------------
-col1, col2, col3, col4 = st.columns(4)
-
-with col1:
-    if st.button("🔖 BOOKMARKS", use_container_width=True):
-        st.session_state.show_bookmarks = not st.session_state.get("show_bookmarks", False)
+col2, col3, col4 = st.columns(3)
 
 with col2:
     if st.button("🔥 TRENDING", use_container_width=True):
@@ -481,27 +477,7 @@ MARKET_FEEDS = [
     "https://www.moneycontrol.com/rss/marketreports.xml",
 ]
 
-# ------------------ BOOKMARKS VIEW ------------------
-if st.session_state.get("show_bookmarks", False):
-    st.markdown("## 🔖 Bookmarks")
-    if not st.session_state.bookmarks:
-        st.info("📭 No bookmarks yet")
-    else:
-        for link, data in st.session_state.bookmarks.items():
-            st.markdown(f"""
-            <div class="article-card">
-                <div class="article-title">{data['title']}</div>
-                <span class="badge badge-time">Saved: {data['saved_at']}</span>
-            </div>
-            """, unsafe_allow_html=True)
-            col1, col2 = st.columns([5, 1])
-            with col1:
-                st.link_button("🔗 Open", link, use_container_width=True)
-            with col2:
-                if st.button("🗑️", key=f"del_{link}"):
-                    del st.session_state.bookmarks[link]
-                    st.rerun()
-    st.stop()
+
 
 # ------------------ TRENDING VIEW ------------------
 if st.session_state.get("show_trends", False):
@@ -568,15 +544,15 @@ def render_news(feeds, tab_name):
                 'category': categorize_article(title, summary),
                 'sentiment': sentiment,
                 'sentiment_class': sentiment_class,
-                'is_read': e.link in st.session_state.read_articles,
-                'is_bookmarked': e.link in st.session_state.bookmarks
+                'is_read': e.link in st.session_state.read_articles
             })
     
     collected.sort(key=lambda x: x['time'], reverse=True)
     
     if not collected:
         st.info("📭 No new articles")
-        return
+        returnif st.session_state.get("show_bookmarks", False):
+    st.markdown("## 🔖 Bookmarks")
     
     st.success(f"✨ {len(collected)} articles")
     
@@ -616,16 +592,7 @@ def render_full(a):
         if st.button("✓ Read", key=f"r_{a['link']}", use_container_width=True):
             st.session_state.read_articles.add(a['link'])
             return
-    with col2:
-        if st.button(f"{icon} Save", key=f"b_{a['link']}", use_container_width=True):
-            if a['is_bookmarked']:
-                del st.session_state.bookmarks[a['link']]
-            else:
-                st.session_state.bookmarks[a['link']] = {
-                    'title': a['title'],
-                    'saved_at': datetime.now(IST).strftime("%Y-%m-%d %H:%M")
-                }
-            return
+            
     with col3:
         st.link_button("🔗 Open", a['link'], use_container_width=True)
 
