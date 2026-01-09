@@ -18,8 +18,7 @@ socket.setdefaulttimeout(5)  # Reduced timeout for faster loading
 
 st.set_page_config(
     layout="wide", 
-    page_title="NEWS PRO", 
-    page_icon="📰",
+    page_title="MARKET NEWS", 
     initial_sidebar_state="collapsed"
 )
 
@@ -311,8 +310,8 @@ with col_l:
     st.markdown("""
     <div class="main-header">
         <div>
-            <h1 class="header-title">📰 NEWS PRO</h1>
-            <p class="header-subtitle">Real-time aggregation • Auto-refresh • Enterprise grade</p>
+            <h1 class="header-title">MARKET NEWS</h1>
+            <p class="header-subtitle">WORK IN PROGESS</p>
         </div>
     </div>
     """, unsafe_allow_html=True)
