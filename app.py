@@ -675,5 +675,3 @@ with tabs[1]:
 
 with tabs[2]:
     render_news(MARKET_FEEDS, "Markets")
-
-analysis this code first 
