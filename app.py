@@ -51,27 +51,42 @@ st.markdown("""
     #MainMenu, footer, header {visibility: hidden;}
     
     .main-header {
-        background: linear-gradient(135deg, #1e3a8a 0%, #312e81 100%);
-        padding: 24px 32px;
-        border-radius: 12px;
-        margin-bottom: 24px;
-        box-shadow: 0 4px 20px rgba(30, 58, 138, 0.4);
-        border: 1px solid rgba(59, 130, 246, 0.2);
-    }
+    background: linear-gradient(
+        135deg,
+        #42a5f5 0%,
+        #1e88e5 50%,
+        #0d47a1 100%
+    );
+    padding: 36px 44px;
+    border-radius: 16px;
+    margin-bottom: 28px;
+    box-shadow: 0 12px 32px rgba(13, 71, 161, 0.35);
+    display: flex;
+    align-items: center;
+}
     
     .header-title {
-        font-size: 500px;
-        font-weight: 800;
-        color: white;
-        margin: 0;
-        letter-spacing: -0.5px;
-    }
+    font-size: 36px;
+    font-weight: 800;
+    color: #ffffff;
+    margin: 0;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+}
     
-    .header-subtitle {
-        font-size: 14px;
-        color: rgba(255,255,255,0.7);
-        margin-top: 4px;
-        font-weight: 500;
+    .header-subtitle,
+.header-tag {
+    margin-top: 14px;
+    display: inline-block;
+    padding: 6px 16px;
+    background: rgba(255, 255, 255, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    color: #ffffff;
+    font-size: 12px;
+    font-weight: 600;
+    border-radius: 20px;
+    letter-spacing: 0.6px;
+}
     }
     
     .live-badge {
@@ -145,7 +160,7 @@ st.markdown("""
     }
     
     .article-card:hover {
-        border-left-color: #60a5fa;
+        border-left-color: #1e88e5;
         border-color: rgba(59, 130, 246, 0.3);
         transform: translateX(4px);
         box-shadow: 0 4px 16px rgba(59, 130, 246, 0.1);
@@ -219,23 +234,29 @@ st.markdown("""
     }
     
     .stButton > button {
-        background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
-        color: white;
-        border: none;
-        border-radius: 8px;
-        padding: 10px 20px;
-        font-weight: 700;
-        transition: all 0.2s ease;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        font-size: 12px;
-    }
+    background: linear-gradient(
+        135deg,
+        #42a5f5 0%,
+        #1e88e5 100%
+    );
+    color: #ffffff;
+    border: none;
+    border-radius: 10px;
+    padding: 10px 20px;
+    font-weight: 700;
+    transition: all 0.25s ease;
+    letter-spacing: 0.4px;
+}
     
     .stButton > button:hover {
-        background: linear-gradient(135deg, #1d4ed8 0%, #1e3a8a 100%);
-        transform: translateY(-1px);
-        box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
-    }
+    background: linear-gradient(
+        135deg,
+        #1e88e5 0%,
+        #0d47a1 100%
+    );
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(13, 71, 161, 0.4);
+}
     
     .stTextInput > div > div > input {
         background: #1e293b;
