@@ -321,7 +321,7 @@ with col_r:
         st.session_state.force_live = True
         st.session_state.last_fetch = None
         st.session_state.seen.clear()   # optional but recommended
-        st.rerun()
+        return
 
 # ------------------ STATS ------------------
 col1, col2, col3, col4, col5 = st.columns(5)
@@ -387,13 +387,13 @@ with col3:
     next_mode = "compact" if current_mode == "list" else "list"
     if st.button(view_modes[current_mode], use_container_width=True):
         st.session_state.settings["view_mode"] = next_mode
-        st.rerun()
+        return
 
 with col4:
     if st.button("🔄 REFRESH", use_container_width=True):
         st.session_state.seen.clear()
         st.session_state.last_fetch = None
-        st.rerun()
+        return
 
 st.markdown("<br>", unsafe_allow_html=True)
 
@@ -416,7 +416,7 @@ with f3:
         st.session_state.search_query = search_input.strip()
         st.session_state.filter_date = date_input
         st.session_state.seen.clear()
-        st.rerun()
+        return
 
 st.markdown("<br>", unsafe_allow_html=True)
 
@@ -520,7 +520,7 @@ if st.session_state.get("show_bookmarks", False):
             with col2:
                 if st.button("🗑️", key=f"del_{link}"):
                     del st.session_state.bookmarks[link]
-                    st.rerun()
+                    return
     st.stop()
 
 # ------------------ TRENDING VIEW ------------------
@@ -635,7 +635,7 @@ def render_full(a):
     with col1:
         if st.button("✓ Read", key=f"r_{a['link']}", use_container_width=True):
             st.session_state.read_articles.add(a['link'])
-            st.rerun()
+            return
     with col2:
         if st.button(f"{icon} Save", key=f"b_{a['link']}", use_container_width=True):
             if a['is_bookmarked']:
@@ -645,7 +645,7 @@ def render_full(a):
                     'title': a['title'],
                     'saved_at': datetime.now(IST).strftime("%Y-%m-%d %H:%M")
                 }
-            st.rerun()
+            return
     with col3:
         st.link_button("🔗 Open", a['link'], use_container_width=True)
 
