@@ -319,6 +319,27 @@ st.markdown("""
         background: #3b82f6;
         border-radius: 4px;
     }
+    .logo-header {
+        margin: 12px 0 28px 6px;
+    }
+    
+    .logo-title {
+        font-size: 34px;
+        font-weight: 900;
+        letter-spacing: 1.4px;
+        background: linear-gradient(135deg, #42a5f5, #1e88e5, #0d47a1);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
+    
+    .logo-subtitle {
+        margin-top: 4px;
+        font-size: 12px;
+        font-weight: 600;
+        color: #64748b;
+        letter-spacing: 0.5px;
+    }
+    
 </style>
 """, unsafe_allow_html=True)
 
