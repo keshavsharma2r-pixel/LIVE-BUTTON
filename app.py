@@ -33,8 +33,6 @@ if "search_query" not in st.session_state:
     st.session_state.search_query = ""
 if "filter_date" not in st.session_state:
     st.session_state.filter_date = None
-if "bookmarks" not in st.session_state:
-    st.session_state.bookmarks = {}
 if "read_articles" not in st.session_state:
     st.session_state.read_articles = set()
 if "settings" not in st.session_state:
@@ -551,9 +549,8 @@ def render_news(feeds, tab_name):
     
     if not collected:
         st.info("📭 No new articles")
-        returnif st.session_state.get("show_bookmarks", False):
-    st.markdown("## 🔖 Bookmarks")
-    
+        return
+        
     st.success(f"✨ {len(collected)} articles")
     
     # Render based on view mode
@@ -585,13 +582,13 @@ def render_full(a):
         with st.expander("📄 Preview", expanded=False):
             st.write(a['summary'][:250] + "...")
     
-    col1, col2, col3 = st.columns(3)
-    icon = "🔖" if a['is_bookmarked'] else "📑"
+    col1, col3 = st.columns(2)
+    
     
     with col1:
         if st.button("✓ Read", key=f"r_{a['link']}", use_container_width=True):
             st.session_state.read_articles.add(a['link'])
-            return
+            st.rerun()
             
     with col3:
         st.link_button("🔗 Open", a['link'], use_container_width=True)
@@ -599,13 +596,13 @@ def render_full(a):
 def render_compact(a):
     tag, age, _ = freshness_label(a['time'])
     read = "✓" if a['is_read'] else ""
-    bookmark = "🔖" if a['is_bookmarked'] else ""
+   
     
     col1, col2 = st.columns([6, 1])
     with col1:
         st.markdown(f"""
         <div class="compact-row">
-            {read} {bookmark} <strong style="color: white;">{a['title']}</strong><br>
+            {read} <strong style="color: white;">{a['title']}</strong><br>
             <small style="color: #64748b;">{tag} {age} • {a['source']} • {a['category']}</small>
         </div>
         """, unsafe_allow_html=True)
