@@ -60,7 +60,7 @@ st.markdown("""
     }
     
     .header-title {
-        font-size: 100px;
+        font-size: 500px;
         font-weight: 800;
         color: white;
         margin: 0;
