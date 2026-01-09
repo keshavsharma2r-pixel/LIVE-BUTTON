@@ -388,7 +388,7 @@ with col3:
     next_mode = "compact" if current_mode == "list" else "list"
     if st.button(view_modes[current_mode], use_container_width=True):
         st.session_state.settings["view_mode"] = next_mode
-        return
+        st.rerun()
 
 with col4:
     if st.button("🔄 REFRESH", use_container_width=True):
