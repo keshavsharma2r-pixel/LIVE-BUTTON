@@ -417,7 +417,7 @@ with f3:
         st.session_state.search_query = search_input.strip()
         st.session_state.filter_date = date_input
         st.session_state.seen.clear()
-        return
+        st.rerun()
 
 st.markdown("<br>", unsafe_allow_html=True)
 
