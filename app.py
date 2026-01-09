@@ -23,6 +23,8 @@ st.set_page_config(
 )
 
 # ------------------ SESSION STATE ------------------
+if "force_live" not in st.session_state:
+    st.session_state.force_live = False
 if "seen" not in st.session_state:
     st.session_state.seen = set()
 if "last_fetch" not in st.session_state:
@@ -302,20 +304,24 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ------------------ HEADER ------------------
-st.markdown("""
-<div class="main-header">
-    <div style="display: flex; justify-content: space-between; align-items: center;">
+col_l, col_r = st.columns([6, 1])
+
+with col_l:
+    st.markdown("""
+    <div class="main-header">
         <div>
             <h1 class="header-title">📰 NEWS PRO</h1>
             <p class="header-subtitle">Real-time aggregation • Auto-refresh • Enterprise grade</p>
         </div>
-        <div class="live-badge">
-            <div class="live-dot"></div>
-            LIVE
-        </div>
     </div>
-</div>
-""", unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
+
+with col_r:
+    if st.button("🔴 LIVE", use_container_width=True):
+        st.session_state.force_live = True
+        st.session_state.last_fetch = None
+        st.session_state.seen.clear()   # optional but recommended
+        st.rerun()
 
 # ------------------ STATS ------------------
 col1, col2, col3, col4, col5 = st.columns(5)
@@ -529,12 +535,12 @@ def render_news(feeds, tab_name):
     now = datetime.now(IST)
     
     # Auto-refresh logic
-    if st.session_state.last_fetch:
-        elapsed = (now - st.session_state.last_fetch).total_seconds()
-        if elapsed < REFRESH:
-            time.sleep(3)
-            st.rerun()
-    
+    if not st.session_state.force_live and st.session_state.last_fetch:
+    elapsed = (now - st.session_state.last_fetch).total_seconds()
+    if elapsed < REFRESH:
+        return
+        
+    st.session_state.force_live = False    
     st.session_state.last_fetch = now
     
     # Fetch all feeds in parallel (MUCH FASTER)
@@ -590,8 +596,6 @@ def render_news(feeds, tab_name):
     
     if not collected:
         st.info("📭 No new articles")
-        time.sleep(REFRESH)
-        st.rerun()
         return
     
     st.success(f"✨ {len(collected)} articles")
@@ -605,9 +609,6 @@ def render_news(feeds, tab_name):
     else:
         for article in collected:
             render_full(article)
-    
-    time.sleep(REFRESH)
-    st.rerun()
 
 def render_full(a):
     tag, age, tag_class = freshness_label(a['time'])
