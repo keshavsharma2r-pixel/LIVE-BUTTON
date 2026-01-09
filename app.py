@@ -321,7 +321,6 @@ with col_r:
     if st.button("🔴 LIVE", use_container_width=True):
         st.session_state.force_live = True
         st.session_state.last_fetch = None
-        st.session_state.seen.clear()   # optional but recommended
         st.rerun()
 
 # 🔄 AUTO REFRESH (ADD THIS LINE)
